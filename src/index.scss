@@ -1,0 +1,54 @@
+/* Manzione Properties – Global Styles */
+
+:root {
+  --color-gold: #b8966e;
+  --color-gold-light: #d4b896;
+  --color-dark: #1a1a1a;
+  --color-text: #3a3a3a;
+  --color-bg: #fafaf8;
+  --font-heading: 'Montserrat', sans-serif;
+  --font-body: 'Cormorant Garamond', serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 87.5%;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  line-height: 1.7;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  color: var(--color-dark);
+}
+
+a {
+  color: var(--color-gold);
+  text-decoration: none;
+  transition: color 0.2s ease;
+
+  &:hover {
+    color: var(--color-gold-light);
+  }
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
