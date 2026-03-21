@@ -1,0 +1,67 @@
+import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { LoginPage } from '../pages/Login';
+import { Layout } from '../components/layout/Layout';
+import { ProtectedRoute } from './ProtectedRoute';
+import { Dashboard } from '../pages/admin/Dashboard';
+import { Properties } from '../pages/admin/Properties';
+import { Tenants } from '../pages/admin/Tenants';
+import { Payments } from '../pages/admin/Payments';
+import { Maintenance } from '../pages/admin/Maintenance';
+import { Reports } from '../pages/admin/Reports';
+import { Escrow } from '../pages/admin/Escrow';
+import { CRM } from '../pages/admin/CRM';
+import { Documents } from '../pages/admin/Documents';
+import { TenantHome } from '../pages/tenant/TenantHome';
+import { TenantPayment } from '../pages/tenant/TenantPayment';
+import { TenantHistory } from '../pages/tenant/TenantHistory';
+import { TenantMaintenance } from '../pages/tenant/TenantMaintenance';
+import { TenantDocuments } from '../pages/tenant/TenantDocuments';
+
+export const router = createBrowserRouter([
+  {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
+    path: '/',
+    element: <Navigate to="/login" replace />,
+  },
+  {
+    path: '/admin',
+    element: (
+      <ProtectedRoute role="admin">
+        <Layout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, element: <Dashboard /> },
+      { path: 'properties', element: <Properties /> },
+      { path: 'tenants', element: <Tenants /> },
+      { path: 'payments', element: <Payments /> },
+      { path: 'maintenance', element: <Maintenance /> },
+      { path: 'reports', element: <Reports /> },
+      { path: 'escrow', element: <Escrow /> },
+      { path: 'crm', element: <CRM /> },
+      { path: 'documents', element: <Documents /> },
+    ],
+  },
+  {
+    path: '/tenant',
+    element: (
+      <ProtectedRoute role="tenant">
+        <Layout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, element: <TenantHome /> },
+      { path: 'payment', element: <TenantPayment /> },
+      { path: 'history', element: <TenantHistory /> },
+      { path: 'maintenance', element: <TenantMaintenance /> },
+      { path: 'documents', element: <TenantDocuments /> },
+    ],
+  },
+  {
+    path: '*',
+    element: <Navigate to="/login" replace />,
+  },
+]);
