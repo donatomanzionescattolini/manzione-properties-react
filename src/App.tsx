@@ -1,19 +1,12 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import Navbar from './components/Navbar'
-import Footer from './components/Footer'
-import Home from './pages/Home'
-import './App.scss'
+import { RouterProvider } from 'react-router-dom';
+import { router } from './router';
+import { ToastContainer } from './components/ui/Toast';
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Navbar />
-      <main>
-        <Routes>
-          <Route path="/" element={<Home />} />
-        </Routes>
-      </main>
-      <Footer />
-    </BrowserRouter>
-  )
+    <>
+      <RouterProvider router={router} />
+      <ToastContainer />
+    </>
+  );
 }
