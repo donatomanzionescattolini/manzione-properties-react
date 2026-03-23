@@ -43,22 +43,26 @@ export function TenantMaintenance() {
     setIsModalOpen(true);
   };
 
-  const onSubmit = (data: FormData) => {
+  const onSubmit = async (data: FormData) => {
     if (!tenant) return;
-    addMaintenanceRequest({
-      tenantId: tenant.id,
-      propertyId: tenant.propertyId,
-      title: data.title,
-      description: data.description,
-      category: data.category,
-      priority: data.priority,
-      status: 'pending',
-      photos: [],
-      notes: [],
-      submittedDate: format(new Date(), 'yyyy-MM-dd'),
-    });
-    toast.success('Maintenance request submitted!');
-    setIsModalOpen(false);
+    try {
+      await addMaintenanceRequest({
+        tenantId: tenant.id,
+        propertyId: tenant.propertyId,
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        priority: data.priority,
+        status: 'pending',
+        photos: [],
+        notes: [],
+        submittedDate: format(new Date(), 'yyyy-MM-dd'),
+      });
+      toast.success('Maintenance request submitted!');
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Failed to submit request');
+    }
   };
 
   const priorityBadge: Record<string, string> = {

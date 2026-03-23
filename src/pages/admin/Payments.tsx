@@ -95,43 +95,55 @@ export function Payments() {
     setIsPaymentModalOpen(true);
   };
 
-  const onPaymentSubmit = (data: PaymentFormData) => {
+  const onPaymentSubmit = async (data: PaymentFormData) => {
     const tenant = tenants.find((t) => t.id === data.tenantId);
     if (!tenant) return;
-    addPayment({
-      tenantId: data.tenantId,
-      propertyId: tenant.propertyId,
-      amount: data.amount,
-      date: data.date,
-      method: data.method,
-      reference: data.reference,
-      notes: data.notes,
-      status: 'completed',
-    });
-    toast.success('Payment recorded successfully');
-    setIsPaymentModalOpen(false);
-  };
-
-  const onWaiveSubmit = (data: WaiveFormData) => {
-    if (waiveTarget) {
-      updateLateFee(waiveTarget.id, {
-        status: 'waived',
-        waiverReason: data.waiverReason,
-        waivedBy: currentUser?.name ?? 'Admin',
-        waivedAt: new Date().toISOString(),
+    try {
+      await addPayment({
+        tenantId: data.tenantId,
+        propertyId: tenant.propertyId,
+        amount: data.amount,
+        date: data.date,
+        method: data.method,
+        reference: data.reference,
+        notes: data.notes,
+        status: 'completed',
       });
-      toast.success('Late fee waived');
-      setWaiveTarget(null);
-      resetWaive();
+      toast.success('Payment recorded successfully');
+      setIsPaymentModalOpen(false);
+    } catch {
+      toast.error('Failed to record payment');
     }
   };
 
-  const handleGenerateLateFees = () => {
-    const generated = generateLateFees(currentUser?.name ?? 'Admin');
-    if (generated.length === 0) {
-      toast.info('No new late fees to generate at this time');
-    } else {
-      toast.success(`Generated ${generated.length} late fee(s)`);
+  const onWaiveSubmit = async (data: WaiveFormData) => {
+    if (waiveTarget) {
+      try {
+        await updateLateFee(waiveTarget.id, {
+          status: 'waived',
+          waiverReason: data.waiverReason,
+          waivedBy: currentUser?.name ?? 'Admin',
+          waivedAt: new Date().toISOString(),
+        });
+        toast.success('Late fee waived');
+        setWaiveTarget(null);
+        resetWaive();
+      } catch {
+        toast.error('Failed to waive late fee');
+      }
+    }
+  };
+
+  const handleGenerateLateFees = async () => {
+    try {
+      const generated = await generateLateFees(currentUser?.name ?? 'Admin');
+      if (generated.length === 0) {
+        toast.info('No new late fees to generate at this time');
+      } else {
+        toast.success(`Generated ${generated.length} late fee(s)`);
+      }
+    } catch {
+      toast.error('Failed to generate late fees');
     }
   };
 
