@@ -87,7 +87,7 @@ export function Maintenance() {
     });
   };
 
-  const onStatusSubmit = (data: StatusUpdateForm) => {
+  const onStatusSubmit = async (data: StatusUpdateForm) => {
     if (!statusTarget) return;
     const updates: Partial<MaintenanceRequest> = {
       status: data.status,
@@ -101,26 +101,34 @@ export function Maintenance() {
     if (data.vendorId && !statusTarget.assignedDate) {
       updates.assignedDate = new Date().toISOString();
     }
-    updateMaintenanceRequest(statusTarget.id, updates);
-    toast.success('Status updated');
-    setStatusTarget(null);
+    try {
+      await updateMaintenanceRequest(statusTarget.id, updates);
+      toast.success('Status updated');
+      setStatusTarget(null);
+    } catch {
+      toast.error('Failed to update status');
+    }
   };
 
-  const onNoteSubmit = (data: NoteForm) => {
+  const onNoteSubmit = async (data: NoteForm) => {
     if (!noteTarget) return;
     const newNote = {
       text: data.text,
       author: currentUser?.name ?? 'Admin',
       timestamp: new Date().toISOString(),
     };
-    updateMaintenanceRequest(noteTarget.id, {
-      notes: [...noteTarget.notes, newNote],
-    });
-    toast.success('Note added');
-    setNoteTarget(null);
-    resetNote();
-    if (viewTarget?.id === noteTarget.id) {
-      setViewTarget({ ...noteTarget, notes: [...noteTarget.notes, newNote] });
+    try {
+      await updateMaintenanceRequest(noteTarget.id, {
+        notes: [...noteTarget.notes, newNote],
+      });
+      toast.success('Note added');
+      setNoteTarget(null);
+      resetNote();
+      if (viewTarget?.id === noteTarget.id) {
+        setViewTarget({ ...noteTarget, notes: [...noteTarget.notes, newNote] });
+      }
+    } catch {
+      toast.error('Failed to add note');
     }
   };
 

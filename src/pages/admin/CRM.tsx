@@ -89,15 +89,19 @@ export function CRM() {
     setIsVendorModalOpen(true);
   };
 
-  const onVendorSubmit = (data: VendorForm) => {
-    if (editVendor) {
-      updateVendor(editVendor.id, data);
-      toast.success('Vendor updated');
-    } else {
-      addVendor({ ...data, properties: undefined as unknown as never } as Omit<Vendor, 'id' | 'createdAt'>);
-      toast.success('Vendor added');
+  const onVendorSubmit = async (data: VendorForm) => {
+    try {
+      if (editVendor) {
+        await updateVendor(editVendor.id, data);
+        toast.success('Vendor updated');
+      } else {
+        await addVendor({ ...data, properties: undefined as unknown as never } as Omit<Vendor, 'id' | 'createdAt'>);
+        toast.success('Vendor added');
+      }
+      setIsVendorModalOpen(false);
+    } catch {
+      toast.error('Failed to save vendor');
     }
-    setIsVendorModalOpen(false);
   };
 
   const openAddOwner = () => {
@@ -116,15 +120,19 @@ export function CRM() {
     setIsOwnerModalOpen(true);
   };
 
-  const onOwnerSubmit = (data: OwnerForm) => {
-    if (editOwner) {
-      updateOwner(editOwner.id, data);
-      toast.success('Owner updated');
-    } else {
-      addOwner({ ...data, properties: [], portalEnabled: false });
-      toast.success('Owner added');
+  const onOwnerSubmit = async (data: OwnerForm) => {
+    try {
+      if (editOwner) {
+        await updateOwner(editOwner.id, data);
+        toast.success('Owner updated');
+      } else {
+        await addOwner({ ...data, properties: [], portalEnabled: false });
+        toast.success('Owner added');
+      }
+      setIsOwnerModalOpen(false);
+    } catch {
+      toast.error('Failed to save owner');
     }
-    setIsOwnerModalOpen(false);
   };
 
   const getOwnerProperties = (o: Owner) => {
@@ -441,7 +449,7 @@ export function CRM() {
       <ConfirmDialog
         isOpen={!!deleteVendorTarget}
         onClose={() => setDeleteVendorTarget(null)}
-        onConfirm={() => { if (deleteVendorTarget) { deleteVendor(deleteVendorTarget.id); toast.success('Vendor deleted'); setDeleteVendorTarget(null); } }}
+        onConfirm={async () => { if (deleteVendorTarget) { try { await deleteVendor(deleteVendorTarget.id); toast.success('Vendor deleted'); setDeleteVendorTarget(null); } catch { toast.error('Failed to delete vendor'); } } }}
         title="Delete Vendor"
         message={`Are you sure you want to delete "${deleteVendorTarget?.name}"?`}
         confirmLabel="Delete Vendor"
@@ -450,7 +458,7 @@ export function CRM() {
       <ConfirmDialog
         isOpen={!!deleteOwnerTarget}
         onClose={() => setDeleteOwnerTarget(null)}
-        onConfirm={() => { if (deleteOwnerTarget) { deleteOwner(deleteOwnerTarget.id); toast.success('Owner deleted'); setDeleteOwnerTarget(null); } }}
+        onConfirm={async () => { if (deleteOwnerTarget) { try { await deleteOwner(deleteOwnerTarget.id); toast.success('Owner deleted'); setDeleteOwnerTarget(null); } catch { toast.error('Failed to delete owner'); } } }}
         title="Delete Owner"
         message={`Are you sure you want to delete "${deleteOwnerTarget?.name}"?`}
         confirmLabel="Delete Owner"

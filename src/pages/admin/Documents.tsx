@@ -11,6 +11,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { toast } from '../../components/ui/Toast';
+import { supabase } from '../../lib/supabase';
 import type { Document } from '../../types';
 
 const schema = z.object({
@@ -39,6 +40,7 @@ export function Documents() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const {
     register,
@@ -47,15 +49,18 @@ export function Documents() {
     formState: { errors },
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const filtered = documents.filter((d) => {
-    if (filterType && d.type !== filterType) return false;
-    if (filterProperty && d.propertyId !== filterProperty) return false;
-    if (filterTenant && d.tenantId !== filterTenant) return false;
-    return true;
-  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const filtered = documents
+    .filter((d) => {
+      if (filterType && d.type !== filterType) return false;
+      if (filterProperty && d.propertyId !== filterProperty) return false;
+      if (filterTenant && d.tenantId !== filterTenant) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const openModal = () => {
     setSelectedFile(null);
+    setUploadProgress(0);
     reset({ type: 'other', propertyId: '', tenantId: '', description: '' });
     setIsModalOpen(true);
   };
@@ -72,40 +77,91 @@ export function Documents() {
     }
 
     setIsUploading(true);
+    setUploadProgress(10);
 
     try {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        addDocument({
-          type: data.type,
-          propertyId: data.propertyId || undefined,
-          tenantId: data.tenantId || undefined,
-          name: selectedFile.name,
-          url: base64,
-          size: selectedFile.size,
-          mimeType: selectedFile.type,
-          description: data.description,
-          uploadedBy: currentUser?.name ?? 'Admin',
+      // Upload to Supabase Storage
+      const fileExt = selectedFile.name.split('.').pop();
+      const uniqueName = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${fileExt}`;
+      const storagePath = `${data.propertyId ?? 'general'}/${data.tenantId ?? 'shared'}/${uniqueName}`;
+
+      setUploadProgress(30);
+
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: false,
         });
-        toast.success('Document uploaded successfully');
-        setIsModalOpen(false);
-        setIsUploading(false);
-        setSelectedFile(null);
-      };
-      reader.readAsDataURL(selectedFile);
-    } catch {
-      toast.error('Failed to upload document');
+
+      if (uploadError) throw uploadError;
+
+      setUploadProgress(70);
+
+      // Get a signed URL (private bucket) or public URL
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(storagePath);
+
+      const fileUrl = urlData?.publicUrl ?? storagePath;
+
+      setUploadProgress(90);
+
+      await addDocument({
+        type: data.type,
+        propertyId: data.propertyId || undefined,
+        tenantId: data.tenantId || undefined,
+        name: selectedFile.name,
+        url: fileUrl,
+        size: selectedFile.size,
+        mimeType: selectedFile.type || 'application/octet-stream',
+        description: data.description,
+        uploadedBy: currentUser?.name ?? 'Admin',
+      });
+
+      setUploadProgress(100);
+      toast.success('Document uploaded successfully');
+      setIsModalOpen(false);
+      setSelectedFile(null);
+      setUploadProgress(0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload document';
+      toast.error(msg);
+    } finally {
       setIsUploading(false);
     }
   };
 
-  const handleDownload = (doc: Document) => {
-    const link = document.createElement('a');
-    link.href = doc.url;
-    link.download = doc.name;
-    link.click();
-    toast.success('Download started');
+  const handleDownload = async (doc: Document) => {
+    try {
+      // Try to get a signed URL for private buckets
+      const urlParts = doc.url.split('/storage/v1/object/public/documents/');
+      if (urlParts.length === 2) {
+        const { data, error } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(urlParts[1], 60); // 60 second signed URL
+        if (!error && data?.signedUrl) {
+          window.open(data.signedUrl, '_blank');
+          toast.success('Download started');
+          return;
+        }
+      }
+      // Fallback: open URL directly
+      window.open(doc.url, '_blank');
+      toast.success('Download started');
+    } catch {
+      window.open(doc.url, '_blank');
+    }
+  };
+
+  const handleDelete = async (doc: Document) => {
+    try {
+      await deleteDocument(doc.id);
+      toast.success('Document deleted');
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error('Failed to delete document');
+    }
   };
 
   const getPropertyAddress = (propertyId?: string) => {
@@ -258,7 +314,7 @@ export function Documents() {
               className="btn-primary"
               disabled={isUploading}
             >
-              {isUploading ? 'Uploading...' : 'Upload Document'}
+              {isUploading ? `Uploading... ${uploadProgress}%` : 'Upload Document'}
             </button>
           </>
         }
@@ -270,12 +326,21 @@ export function Documents() {
               ref={fileInputRef}
               type="file"
               onChange={handleFileChange}
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
               className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary-light cursor-pointer"
             />
             {selectedFile && (
               <p className="text-xs text-gray-500 mt-1">
                 Selected: {selectedFile.name} ({formatBytes(selectedFile.size)})
               </p>
+            )}
+            {isUploading && uploadProgress > 0 && (
+              <div className="mt-2 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
             )}
           </div>
           <div>
@@ -310,7 +375,12 @@ export function Documents() {
           </div>
           <div>
             <label className="label">Description (optional)</label>
-            <textarea {...register('description')} className="input-field" rows={2} placeholder="Brief description of the document" />
+            <textarea
+              {...register('description')}
+              className="input-field"
+              rows={2}
+              placeholder="Brief description of the document"
+            />
           </div>
         </div>
       </Modal>
@@ -318,15 +388,9 @@ export function Documents() {
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) {
-            deleteDocument(deleteTarget.id);
-            toast.success('Document deleted');
-            setDeleteTarget(null);
-          }
-        }}
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
         title="Delete Document"
-        message={`Are you sure you want to delete "${deleteTarget?.name}"?`}
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This will permanently remove the file.`}
         confirmLabel="Delete Document"
       />
     </div>

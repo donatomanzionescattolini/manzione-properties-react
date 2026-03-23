@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Edit2, Trash2, Users, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Eye, Mail } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { useDataStore } from '../../store/dataStore';
 import { PageHeader } from '../../components/layout/PageHeader';
@@ -79,22 +80,50 @@ export function Tenants() {
     setIsModalOpen(true);
   };
 
-  const onSubmit = (data: FormData) => {
-    if (editTarget) {
-      updateTenant(editTarget.id, data);
-      toast.success('Tenant updated successfully');
-    } else {
-      addTenant(data);
-      toast.success('Tenant added successfully');
+  const onSubmit = async (data: FormData) => {
+    try {
+      if (editTarget) {
+        await updateTenant(editTarget.id, data);
+        toast.success('Tenant updated successfully');
+      } else {
+        await addTenant(data);
+        toast.success('Tenant added successfully');
+      }
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Failed to save tenant');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteTarget) {
-      deleteTenant(deleteTarget.id);
-      toast.success('Tenant deleted');
-      setDeleteTarget(null);
+      try {
+        await deleteTenant(deleteTarget.id);
+        toast.success('Tenant deleted');
+        setDeleteTarget(null);
+      } catch {
+        toast.error('Failed to delete tenant');
+      }
+    }
+  };
+
+  const handleInvite = async (t: Tenant) => {
+    const property = properties.find((p) => p.id === t.propertyId);
+    try {
+      const { error } = await supabase.functions.invoke('create-tenant-account', {
+        body: {
+          tenantId: t.id,
+          email: t.email,
+          name: `${t.firstName} ${t.lastName}`,
+          propertyAddress: property ? `${property.address}, ${property.city}` : undefined,
+          portalUrl: window.location.origin,
+        },
+      });
+      if (error) throw error;
+      toast.success(`Invitation sent to ${t.email}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send invitation';
+      toast.error(msg);
     }
   };
 
@@ -174,6 +203,13 @@ export function Tenants() {
                         title="Edit"
                       >
                         <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleInvite(t)}
+                        className="btn btn-ghost btn-sm p-1.5 text-blue-500 hover:bg-blue-50"
+                        title="Invite to Portal"
+                      >
+                        <Mail size={14} />
                       </button>
                       <button
                         onClick={() => setDeleteTarget(t)}

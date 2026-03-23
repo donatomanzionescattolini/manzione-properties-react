@@ -80,22 +80,30 @@ export function Properties() {
     setIsModalOpen(true);
   };
 
-  const onSubmit = (data: FormData) => {
-    if (editTarget) {
-      updateProperty(editTarget.id, { ...data, ownerId: data.ownerId || undefined });
-      toast.success('Property updated successfully');
-    } else {
-      addProperty({ ...data, ownerId: data.ownerId || undefined });
-      toast.success('Property added successfully');
+  const onSubmit = async (data: FormData) => {
+    try {
+      if (editTarget) {
+        await updateProperty(editTarget.id, { ...data, ownerId: data.ownerId || undefined });
+        toast.success('Property updated successfully');
+      } else {
+        await addProperty({ ...data, ownerId: data.ownerId || undefined });
+        toast.success('Property added successfully');
+      }
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Failed to save property');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteTarget) {
-      deleteProperty(deleteTarget.id);
-      toast.success('Property deleted');
-      setDeleteTarget(null);
+      try {
+        await deleteProperty(deleteTarget.id);
+        toast.success('Property deleted');
+        setDeleteTarget(null);
+      } catch {
+        toast.error('Failed to delete property');
+      }
     }
   };
 

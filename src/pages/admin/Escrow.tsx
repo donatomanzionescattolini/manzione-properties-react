@@ -76,7 +76,7 @@ export function Escrow() {
     setIsModalOpen(true);
   };
 
-  const onSubmit = (data: TransactionForm) => {
+  const onSubmit = async (data: TransactionForm) => {
     const tenant = tenants.find((t) => t.id === data.tenantId);
     if (!tenant) return;
 
@@ -88,20 +88,21 @@ export function Escrow() {
       }
     }
 
-    addEscrowTransaction({
-      type: data.type,
-      tenantId: data.tenantId,
-      propertyId: tenant.propertyId,
-      amount: data.amount,
-      description: data.description,
-      reference: data.reference,
-      approvedBy: currentUser?.name ?? 'Admin',
-    });
-
-    toast.success(
-      data.type === 'deposit' ? 'Deposit recorded' : 'Withdrawal recorded'
-    );
-    setIsModalOpen(false);
+    try {
+      await addEscrowTransaction({
+        type: data.type,
+        tenantId: data.tenantId,
+        propertyId: tenant.propertyId,
+        amount: data.amount,
+        description: data.description,
+        reference: data.reference,
+        approvedBy: currentUser?.name ?? 'Admin',
+      });
+      toast.success(data.type === 'deposit' ? 'Deposit recorded' : 'Withdrawal recorded');
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Failed to record transaction');
+    }
   };
 
   const sorted = [...escrowTransactions].sort(

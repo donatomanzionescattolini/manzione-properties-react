@@ -3,7 +3,6 @@ export type UserRole = 'admin' | 'tenant';
 export interface User {
   id: string;
   email: string;
-  password: string;
   name: string;
   role: UserRole;
   tenantId?: string;
@@ -193,7 +192,6 @@ export interface Document {
 }
 
 export interface AppStore {
-  users: User[];
   properties: Property[];
   tenants: Tenant[];
   payments: Payment[];

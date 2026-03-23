@@ -3,30 +3,33 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Building, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { Building, Eye, EyeOff, Lock, Mail, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
-const schema = z.object({
+const loginSchema = z.object({
   email: z.string().email('Enter a valid email'),
   password: z.string().min(1, 'Password is required'),
 });
 
-type FormData = z.infer<typeof schema>;
+const resetSchema = z.object({
+  email: z.string().email('Enter a valid email'),
+});
+
+type LoginData = z.infer<typeof loginSchema>;
+type ResetData = z.infer<typeof resetSchema>;
 
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
-  const { login } = useAuthStore();
+  const [showReset, setShowReset] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const { login, resetPassword } = useAuthStore();
   const navigate = useNavigate();
 
-  const {
-    register,
-    handleSubmit,
-    setError,
-    formState: { errors, isSubmitting },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const loginForm = useForm<LoginData>({ resolver: zodResolver(loginSchema) });
+  const resetForm = useForm<ResetData>({ resolver: zodResolver(resetSchema) });
 
-  const onSubmit = (data: FormData) => {
-    const result = login(data.email, data.password);
+  const onLogin = async (data: LoginData) => {
+    const result = await login(data.email, data.password);
     if (result.success) {
       const user = useAuthStore.getState().currentUser;
       if (user?.role === 'admin') {
@@ -35,19 +38,95 @@ export function LoginPage() {
         navigate('/tenant');
       }
     } else {
-      setError('root', { message: result.message });
+      loginForm.setError('root', { message: result.message });
     }
   };
 
-  const fillDemo = (role: 'admin' | 'tenant') => {
-    if (role === 'admin') {
-      login('admin@manzione.com', 'admin123');
-      navigate('/admin');
+  const onResetPassword = async (data: ResetData) => {
+    const result = await resetPassword(data.email);
+    if (result.success) {
+      setResetSent(true);
     } else {
-      login('john@example.com', 'tenant123');
-      navigate('/tenant');
+      resetForm.setError('root', { message: result.message });
     }
   };
+
+  if (showReset) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0d1f2d] via-[#1a3a52] to-[#2d5a7b] flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-[#c9a961] rounded-2xl mb-4 shadow-lg">
+              <Building size={32} className="text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-white">Manzione Properties</h1>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-2xl p-8">
+            <button
+              onClick={() => { setShowReset(false); setResetSent(false); }}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6"
+            >
+              <ArrowLeft size={16} /> Back to Sign In
+            </button>
+
+            {resetSent ? (
+              <div className="text-center py-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Mail size={28} className="text-green-600" />
+                </div>
+                <h2 className="text-xl font-semibold text-gray-800 mb-2">Check Your Email</h2>
+                <p className="text-gray-500 text-sm">
+                  We sent a password reset link to <strong>{resetForm.getValues('email')}</strong>.
+                  Check your inbox and follow the link to reset your password.
+                </p>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-xl font-semibold text-gray-800 mb-2">Reset Password</h2>
+                <p className="text-gray-500 text-sm mb-6">
+                  Enter your email address and we'll send you a link to reset your password.
+                </p>
+
+                <form onSubmit={resetForm.handleSubmit(onResetPassword)} className="space-y-4">
+                  <div>
+                    <label className="label">Email Address</label>
+                    <div className="relative">
+                      <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        {...resetForm.register('email')}
+                        type="email"
+                        className="input-field pl-9"
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                      />
+                    </div>
+                    {resetForm.formState.errors.email && (
+                      <p className="text-red-500 text-xs mt-1">{resetForm.formState.errors.email.message}</p>
+                    )}
+                  </div>
+
+                  {resetForm.formState.errors.root && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-red-600 text-sm">{resetForm.formState.errors.root.message}</p>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={resetForm.formState.isSubmitting}
+                    className="btn-primary w-full justify-center py-3"
+                  >
+                    {resetForm.formState.isSubmitting ? 'Sending...' : 'Send Reset Link'}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0d1f2d] via-[#1a3a52] to-[#2d5a7b] flex items-center justify-center p-4">
@@ -63,30 +142,39 @@ export function LoginPage() {
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-6">Sign In</h2>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
             <div>
               <label className="label">Email Address</label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
-                  {...register('email')}
+                  {...loginForm.register('email')}
                   type="email"
                   className="input-field pl-9"
                   placeholder="you@example.com"
                   autoComplete="email"
                 />
               </div>
-              {errors.email && (
-                <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+              {loginForm.formState.errors.email && (
+                <p className="text-red-500 text-xs mt-1">{loginForm.formState.errors.email.message}</p>
               )}
             </div>
 
             <div>
-              <label className="label">Password</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="label mb-0">Password</label>
+                <button
+                  type="button"
+                  onClick={() => setShowReset(true)}
+                  className="text-xs text-primary hover:text-primary-dark"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <div className="relative">
                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
-                  {...register('password')}
+                  {...loginForm.register('password')}
                   type={showPassword ? 'text' : 'password'}
                   className="input-field pl-9 pr-10"
                   placeholder="Your password"
@@ -100,47 +188,40 @@ export function LoginPage() {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              {errors.password && (
-                <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
+              {loginForm.formState.errors.password && (
+                <p className="text-red-500 text-xs mt-1">{loginForm.formState.errors.password.message}</p>
               )}
             </div>
 
-            {errors.root && (
+            {loginForm.formState.errors.root && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-red-600 text-sm">{errors.root.message}</p>
+                <p className="text-red-600 text-sm">{loginForm.formState.errors.root.message}</p>
               </div>
             )}
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={loginForm.formState.isSubmitting}
               className="btn-primary w-full justify-center py-3"
             >
-              {isSubmitting ? 'Signing in...' : 'Sign In'}
+              {loginForm.formState.isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Signing in...
+                </span>
+              ) : (
+                'Sign In'
+              )}
             </button>
           </form>
 
           <div className="mt-6 pt-6 border-t border-gray-100">
-            <p className="text-xs text-gray-500 mb-3 text-center font-medium uppercase tracking-wider">
-              Demo Access
+            <p className="text-xs text-gray-400 text-center">
+              Contact your property manager if you need access.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => fillDemo('admin')}
-                className="btn-outline text-xs justify-center py-2.5"
-              >
-                Admin Demo
-              </button>
-              <button
-                onClick={() => fillDemo('tenant')}
-                className="btn-ghost text-xs justify-center py-2.5 border border-gray-200"
-              >
-                Tenant Demo
-              </button>
-            </div>
-            <div className="mt-4 bg-gray-50 rounded-lg p-3 text-xs text-gray-500 space-y-1">
-              <p><span className="font-medium">Admin:</span> admin@manzione.com / admin123</p>
-              <p><span className="font-medium">Tenant:</span> john@example.com / tenant123</p>
+            <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
+              <p className="font-medium mb-1">First time signing in?</p>
+              <p>Check your email for an invitation link from your property manager to set up your account.</p>
             </div>
           </div>
         </div>
@@ -148,3 +229,4 @@ export function LoginPage() {
     </div>
   );
 }
+
