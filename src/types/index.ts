@@ -191,15 +191,4 @@ export interface Document {
   createdAt: string;
 }
 
-export interface AppStore {
-  properties: Property[];
-  tenants: Tenant[];
-  payments: Payment[];
-  lateFees: LateFee[];
-  maintenanceRequests: MaintenanceRequest[];
-  vendors: Vendor[];
-  owners: Owner[];
-  expenses: Expense[];
-  escrowTransactions: EscrowTransaction[];
-  documents: Document[];
-}
+
