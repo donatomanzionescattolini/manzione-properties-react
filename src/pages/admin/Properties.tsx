@@ -8,7 +8,7 @@ import { PageHeader } from '../../components/layout/PageHeader';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 import type { Property } from '../../types';
 
 const schema = z.object({

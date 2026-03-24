@@ -10,7 +10,7 @@ import { PageHeader } from '../../components/layout/PageHeader';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 import { supabase } from '../../lib/supabase';
 import type { Document } from '../../types';
 
@@ -159,7 +159,7 @@ export function Documents() {
       await deleteDocument(doc.id);
       toast.success('Document deleted');
       setDeleteTarget(null);
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete document');
     }
   };

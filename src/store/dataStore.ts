@@ -92,6 +92,7 @@ function toLateFee(r: any): LateFee {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toMaintenanceRequest(r: any): MaintenanceRequest {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const notes: MaintenanceNote[] = (r.maintenance_notes ?? []).map((n: any) => ({
     text: n.text,
     author: n.author,

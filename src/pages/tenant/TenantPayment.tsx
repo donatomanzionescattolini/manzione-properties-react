@@ -18,7 +18,7 @@ import {
 import { useDataStore } from '../../store/dataStore';
 import { useAuthStore } from '../../store/authStore';
 import { PageHeader } from '../../components/layout/PageHeader';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 import { supabase } from '../../lib/supabase';
 import { stripePromise, stripeEnabled } from '../../lib/stripe';
 import type { Payment } from '../../types';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useForm, type SubmitHandler } from 'react-hook-form';
+import { useForm, useWatch, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus, AlertTriangle, Zap } from 'lucide-react';
@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { Modal } from '../../components/ui/Modal';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 import type { LateFee } from '../../types';
 
 const paymentSchema = z.object({
@@ -42,7 +42,7 @@ export function Payments() {
     register: regPayment,
     handleSubmit: handlePaymentSubmit,
     reset: resetPayment,
-    watch: watchPayment,
+    control: controlPayment,
     formState: { errors: paymentErrors },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<PaymentFormData>({ resolver: zodResolver(paymentSchema) as any });
@@ -54,7 +54,7 @@ export function Payments() {
     formState: { errors: waiveErrors },
   } = useForm<WaiveFormData>({ resolver: zodResolver(waiveSchema) });
 
-  const selectedTenantId = watchPayment('tenantId');
+  const selectedTenantId = useWatch({ control: controlPayment, name: 'tenantId', defaultValue: '' });
   const selectedTenant = tenants.find((t) => t.id === selectedTenantId);
 
   const filteredPayments = payments

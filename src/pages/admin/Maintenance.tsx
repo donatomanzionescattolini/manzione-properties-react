@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { Modal } from '../../components/ui/Modal';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 import type { MaintenanceRequest } from '../../types';
 
 const statusUpdateSchema = z.object({

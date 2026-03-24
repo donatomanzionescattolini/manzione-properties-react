@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useForm, type SubmitHandler } from 'react-hook-form';
+import { useForm, useWatch, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus, Landmark, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
@@ -10,7 +10,7 @@ import { PageHeader } from '../../components/layout/PageHeader';
 import { Modal } from '../../components/ui/Modal';
 import { StatCard } from '../../components/ui/StatCard';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 
 const transactionSchema = z.object({
   type: z.enum(['deposit', 'withdrawal', 'interest']),
@@ -32,12 +32,12 @@ export function Escrow() {
     register,
     handleSubmit,
     reset,
-    watch,
+    control,
     formState: { errors },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<TransactionForm>({ resolver: zodResolver(transactionSchema) as any });
 
-  const selectedTenantId = watch('tenantId');
+  const selectedTenantId = useWatch({ control, name: 'tenantId', defaultValue: '' });
 
   const tenantBalances = useMemo(() => {
     const balances: Record<string, number> = {};

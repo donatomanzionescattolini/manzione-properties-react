@@ -4,7 +4,7 @@ import { useDataStore } from '../../store/dataStore';
 import { useAuthStore } from '../../store/authStore';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 import type { Document } from '../../types';
 
 function formatBytes(bytes: number) {

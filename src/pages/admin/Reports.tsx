@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { FileText, Printer } from 'lucide-react';
 import { useDataStore } from '../../store/dataStore';
 import { PageHeader } from '../../components/layout/PageHeader';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',

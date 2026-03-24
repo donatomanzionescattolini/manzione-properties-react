@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { Modal } from '../../components/ui/Modal';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { toast } from '../../components/ui/Toast';
+import { toast } from '../../components/ui/toastStore';
 
 const schema = z.object({
   title: z.string().min(1, 'Title required').max(100),

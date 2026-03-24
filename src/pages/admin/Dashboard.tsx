@@ -14,10 +14,12 @@ import { useDataStore } from '../../store/dataStore';
 import { StatCard } from '../../components/ui/StatCard';
 import { PageHeader } from '../../components/layout/PageHeader';
 
+// Stable date reference – sufficient for a dashboard loaded fresh each session.
+const today = new Date();
+
 export function Dashboard() {
   const { properties, tenants, payments, lateFees, maintenanceRequests } = useDataStore();
 
-  const today = new Date();
 
   const thisMonthStart = startOfMonth(today);
   const thisMonthEnd = endOfMonth(today);
