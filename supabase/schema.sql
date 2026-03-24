@@ -79,15 +79,6 @@ create policy "Admins can manage properties" on public.properties
     exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
   );
 
-create policy "Tenants can view their property" on public.properties
-  for select using (
-    exists (
-      select 1 from public.tenants t
-      join public.profiles p on p.tenant_id = t.id
-      where p.id = auth.uid() and t.property_id = public.properties.id
-    )
-  );
-
 -- ============================================================
 -- TENANTS
 -- ============================================================
@@ -118,6 +109,16 @@ create policy "Admins can manage tenants" on public.tenants
 create policy "Tenants can view own record" on public.tenants
   for select using (
     exists (select 1 from public.profiles where id = auth.uid() and tenant_id = public.tenants.id)
+  );
+
+-- Policy deferred here because it references public.tenants (defined above)
+create policy "Tenants can view their property" on public.properties
+  for select using (
+    exists (
+      select 1 from public.tenants t
+      join public.profiles p on p.tenant_id = t.id
+      where p.id = auth.uid() and t.property_id = public.properties.id
+    )
   );
 
 -- ============================================================
