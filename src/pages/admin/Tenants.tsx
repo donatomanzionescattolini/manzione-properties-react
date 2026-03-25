@@ -35,6 +35,7 @@ export function Tenants() {
   const [editTarget, setEditTarget] = useState<Tenant | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
   const [viewTarget, setViewTarget] = useState<Tenant | null>(null);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
 
   const {
     register,
@@ -109,6 +110,7 @@ export function Tenants() {
 
   const handleInvite = async (t: Tenant) => {
     const property = properties.find((p) => p.id === t.propertyId);
+    setInvitingId(t.id);
     try {
       const { error } = await supabase.functions.invoke('create-tenant-account', {
         body: {
@@ -119,11 +121,23 @@ export function Tenants() {
           portalUrl: window.location.origin,
         },
       });
-      if (error) throw error;
+      if (error) {
+        // Extract the real error message from the function's response body
+        let detail = error.message;
+        try {
+          // FunctionsHttpError exposes the raw Response on .context
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const body = await (error as any).context?.json?.();
+          if (body?.error) detail = body.error;
+        } catch { /* ignore parse errors */ }
+        throw new Error(detail);
+      }
       toast.success(`Invitation sent to ${t.email}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to send invitation';
       toast.error(msg);
+    } finally {
+      setInvitingId(null);
     }
   };
 
@@ -206,10 +220,13 @@ export function Tenants() {
                       </button>
                       <button
                         onClick={() => handleInvite(t)}
-                        className="btn btn-ghost btn-sm p-1.5 text-blue-500 hover:bg-blue-50"
+                        disabled={invitingId === t.id}
+                        className="btn btn-ghost btn-sm p-1.5 text-blue-500 hover:bg-blue-50 disabled:opacity-50"
                         title="Invite to Portal"
                       >
-                        <Mail size={14} />
+                        {invitingId === t.id
+                          ? <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
+                          : <Mail size={14} />}
                       </button>
                       <button
                         onClick={() => setDeleteTarget(t)}
