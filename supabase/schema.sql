@@ -19,18 +19,29 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+-- Security definer function: checks admin role WITHOUT triggering RLS recursion
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
 create policy "Users can view own profile" on public.profiles
   for select using (auth.uid() = id);
 
+-- Uses is_admin() instead of a subquery on profiles to avoid infinite recursion
 create policy "Admins can view all profiles" on public.profiles
-  for select using (
-    exists (select 1 from public.profiles p2 where p2.id = auth.uid() and p2.role = 'admin')
-  );
+  for select using (public.is_admin());
 
 create policy "Admins can manage profiles" on public.profiles
-  for all using (
-    exists (select 1 from public.profiles p2 where p2.id = auth.uid() and p2.role = 'admin')
-  );
+  for all using (public.is_admin());
 
 -- Trigger: auto-create profile on signup (admin invite flow)
 create or replace function public.handle_new_user()

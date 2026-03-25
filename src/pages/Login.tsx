@@ -128,6 +128,7 @@ export function LoginPage() {
     );
   }
 
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0d1f2d] via-[#1a3a52] to-[#2d5a7b] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
