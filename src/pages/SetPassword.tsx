@@ -22,11 +22,24 @@ const schema = z
 
 type FormData = z.infer<typeof schema>;
 
+function getInitialLinkError() {
+  const hashParams = new URLSearchParams(window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '');
+  if (!hashParams.get('error')) return null;
+
+  const errorCode = hashParams.get('error_code');
+  const description = decodeURIComponent(hashParams.get('error_description') ?? 'This email link is invalid.').replace(/\+/g, ' ');
+
+  return errorCode === 'otp_expired'
+    ? 'This invite or reset link has expired. Please request a new one.'
+    : description;
+}
+
 export function SetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionReady, setSessionReady] = useState(() => Boolean(getInitialLinkError()));
   const [done, setDone] = useState(false);
+  const [linkError] = useState<string | null>(() => getInitialLinkError());
   const navigate = useNavigate();
 
   const {
@@ -39,6 +52,10 @@ export function SetPasswordPage() {
   // Supabase automatically processes the invite/recovery hash on page load.
   // We wait for the session to be ready before showing the form.
   useEffect(() => {
+    if (linkError) {
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setSessionReady(true);
     });
@@ -50,7 +67,7 @@ export function SetPasswordPage() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [linkError]);
 
   const onSubmit = async (data: FormData) => {
     const { error } = await supabase.auth.updateUser({ password: data.password });
@@ -95,6 +112,16 @@ export function SetPasswordPage() {
             <div className="flex flex-col items-center py-8 gap-4">
               <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
               <p className="text-gray-500 text-sm">Verifying your invitation…</p>
+            </div>
+          ) : linkError ? (
+            <div className="text-center py-4">
+              <h2 className="text-xl font-semibold text-gray-800 mb-2">Link Unavailable</h2>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                <p className="text-red-600 text-sm">{linkError}</p>
+              </div>
+              <button onClick={() => navigate('/login', { replace: true })} className="btn-primary w-full justify-center py-3">
+                Back to Sign In
+              </button>
             </div>
           ) : done ? (
             <div className="text-center py-6">

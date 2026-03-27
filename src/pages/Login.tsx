@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -24,6 +24,8 @@ export function LoginPage() {
   const [resetSent, setResetSent] = useState(false);
   const { login, resetPassword } = useAuthStore();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const authMessage = searchParams.get('message');
 
   const loginForm = useForm<LoginData>({ resolver: zodResolver(loginSchema) });
   const resetForm = useForm<ResetData>({ resolver: zodResolver(resetSchema) });
@@ -141,6 +143,12 @@ export function LoginPage() {
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-6">Sign In</h2>
+
+          {authMessage && (
+            <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-yellow-800 text-sm">{authMessage}</p>
+            </div>
+          )}
 
           <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
             <div>
