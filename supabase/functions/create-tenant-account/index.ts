@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
-        redirectTo: `${portalUrl ?? Deno.env.get('SITE_URL')}/tenant`,
+        redirectTo: `${portalUrl ?? Deno.env.get('SITE_URL')}/set-password`,
         data: {
           name,
           role: 'tenant',

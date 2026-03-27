@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from '../pages/Login';
+import { SetPasswordPage } from '../pages/SetPassword';
 import { Layout } from '../components/layout/Layout';
 import { ProtectedRoute } from './ProtectedRoute';
 import { Dashboard } from '../pages/admin/Dashboard';
@@ -21,6 +22,16 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    // Handles both tenant invite links and admin password-reset links
+    path: '/set-password',
+    element: <SetPasswordPage />,
+  },
+  {
+    // Legacy alias used by resetPassword() in authStore
+    path: '/reset-password',
+    element: <SetPasswordPage />,
   },
   {
     path: '/',
