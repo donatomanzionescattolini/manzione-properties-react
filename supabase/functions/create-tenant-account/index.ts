@@ -12,12 +12,31 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Use service role client to create users
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
+
+    // Verify the caller is an authenticated admin
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+      if (user) {
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        if (!profile || profile.role !== 'admin') {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: admin access required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    }
 
     const { tenantId, email, name, propertyAddress, portalUrl } = await req.json();
 
