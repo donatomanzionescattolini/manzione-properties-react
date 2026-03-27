@@ -15,10 +15,12 @@ import {
   History,
   ScrollText,
   Building,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 
 const adminNav = [
   { label: 'Dashboard', to: '/admin', icon: LayoutDashboard },
+  { label: 'Calendar', to: '/admin/calendar', icon: CalendarIcon },
   { label: 'Properties', to: '/admin/properties', icon: Building2 },
   { label: 'Tenants', to: '/admin/tenants', icon: Users },
   { label: 'Payments', to: '/admin/payments', icon: CreditCard },

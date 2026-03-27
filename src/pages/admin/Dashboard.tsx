@@ -36,7 +36,7 @@ export function Dashboard() {
   const totalLateFees = activeFees.reduce((sum, f) => sum + f.amount, 0);
   const openMaintenance = maintenanceRequests.filter(
     (r) => r.status !== 'completed' && r.status !== 'cancelled'
-  ).length;
+  );
 
   const monthlyData = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => {
@@ -60,9 +60,12 @@ export function Dashboard() {
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
-  const pendingMaintenance = maintenanceRequests
-    .filter((r) => r.status !== 'completed' && r.status !== 'cancelled')
-    .slice(0, 5);
+  const pendingMaintenance = openMaintenance.slice(0, 5);
+
+  const overdueMaintenanceCount = openMaintenance.filter((r) => {
+    const daysOpen = Math.floor((today.getTime() - new Date(r.submittedDate).getTime()) / (1000 * 3600 * 24));
+    return daysOpen > 3;
+  }).length;
 
   const getTenantName = (tenantId: string) => {
     const t = tenants.find((x) => x.id === tenantId);
@@ -96,6 +99,18 @@ export function Dashboard() {
         subtitle={format(today, "EEEE, MMMM d, yyyy")}
       />
 
+      {overdueMaintenanceCount > 0 && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="text-red-500" size={24} />
+            <div>
+              <h3 className="text-red-800 font-bold text-sm">Reminders: Overdue Maintenance</h3>
+              <p className="text-red-600 text-xs">You have {overdueMaintenanceCount} pending maintenance request(s) open for more than 3 days.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
         <StatCard
           title="Properties"
@@ -127,7 +142,7 @@ export function Dashboard() {
         />
         <StatCard
           title="Maintenance"
-          value={openMaintenance}
+          value={openMaintenance.length}
           icon={<Wrench size={20} />}
           color="red"
           subtitle="Open requests"

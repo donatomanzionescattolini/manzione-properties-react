@@ -4,6 +4,7 @@ import { SetPasswordPage } from '../pages/SetPassword';
 import { Layout } from '../components/layout/Layout';
 import { ProtectedRoute } from './ProtectedRoute';
 import { Dashboard } from '../pages/admin/Dashboard';
+import { CalendarPage } from '../pages/admin/CalendarPage';
 import { Properties } from '../pages/admin/Properties';
 import { Tenants } from '../pages/admin/Tenants';
 import { Payments } from '../pages/admin/Payments';
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <Dashboard /> },
+      { path: 'calendar', element: <CalendarPage /> },
       { path: 'properties', element: <Properties /> },
       { path: 'tenants', element: <Tenants /> },
       { path: 'payments', element: <Payments /> },

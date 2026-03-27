@@ -1,5 +1,10 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import Stripe from 'npm:stripe@17';
+
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+  apiVersion: '2025-05-28.basil',
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -91,6 +96,62 @@ Deno.serve(async (req) => {
         role: 'tenant',
         tenant_id: tenantId,
       });
+    }
+
+    try {
+      if (Deno.env.get('STRIPE_SECRET_KEY')) {
+        // Fetch tenant & property data to setup automated email reminders
+        const { data: tenant } = await supabaseAdmin
+          .from('tenants')
+          .select('*, properties(*)')
+          .eq('id', tenantId)
+          .single();
+
+        if (tenant && tenant.properties) {
+          const property = tenant.properties;
+          
+          // Create Stripe Customer
+          const customer = await stripe.customers.create({
+            email,
+            name,
+            metadata: { tenantId, propertyId: property.id },
+          });
+
+          // Create Product/Price dynamically if needed for rent
+          const product = await stripe.products.create({
+            name: `Rent for ${property.address}`,
+            metadata: { propertyId: property.id },
+          });
+
+          const price = await stripe.prices.create({
+            product: product.id,
+            unit_amount: Math.round(tenant.rent_amount * 100),
+            currency: 'usd',
+            recurring: { interval: 'month' },
+          });
+
+          // Define the billing cycle to match the due date
+          const now = new Date();
+          let nextDue = new Date(now.getFullYear(), now.getMonth(), property.rent_due_day);
+          if (nextDue <= now) {
+             nextDue.setMonth(nextDue.getMonth() + 1);
+          }
+          const billingCycleAnchor = Math.floor(nextDue.getTime() / 1000);
+
+          // Create Subscription to send invoices automatically
+          await stripe.subscriptions.create({
+            customer: customer.id,
+            items: [{ price: price.id }],
+            collection_method: 'send_invoice', // Auto-emails the tenant
+            days_until_due: property.grace_period || 5,
+            billing_cycle_anchor: billingCycleAnchor,
+            proration_behavior: 'none',
+            metadata: { tenantId, propertyId: property.id },
+          });
+        }
+      }
+    } catch (stripeErr) {
+      console.warn('Failed to set up Stripe email reminders:', stripeErr);
     }
 
     // Send welcome notification
