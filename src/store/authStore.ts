@@ -5,7 +5,7 @@ import type { User } from '../types';
 interface AuthState {
   currentUser: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string; role?: 'admin' | 'tenant' }>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   initialize: () => Promise<void>;
@@ -45,12 +45,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     // Listen for auth state changes (tab switching, token refresh, etc.)
+    // Note: SIGNED_IN is intentionally excluded — login() handles that directly
+    // to avoid a race condition between the two async profile fetches.
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         set({ currentUser: null });
         return;
       }
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+      if (event === 'TOKEN_REFRESHED' && session?.user) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
@@ -104,7 +106,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       },
     });
 
-    return { success: true };
+    return { success: true, role: profile.role as 'admin' | 'tenant' };
   },
 
   logout: async () => {

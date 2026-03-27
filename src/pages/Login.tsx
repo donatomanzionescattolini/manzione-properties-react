@@ -31,8 +31,7 @@ export function LoginPage() {
   const onLogin = async (data: LoginData) => {
     const result = await login(data.email, data.password);
     if (result.success) {
-      const user = useAuthStore.getState().currentUser;
-      if (user?.role === 'admin') {
+      if (result.role === 'admin') {
         navigate('/admin');
       } else {
         navigate('/tenant');
