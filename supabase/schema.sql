@@ -31,12 +31,12 @@ as $$
     select 1 from public.profiles
     where id = auth.uid() and role = 'admin'
   );
-$$;
-
-create policy "Users can view own profile" on public.profiles
-  for select using (auth.uid() = id);
-
--- Uses is_admin() instead of a subquery on profiles to avoid infinite recursion
+            (
+              (storage.foldername(name))[1] = 'maintenance'
+              and (storage.foldername(name))[2] = t.id::text
+            )
+            or (storage.foldername(name))[1] = coalesce(t.property_id::text, '')
+            or (storage.foldername(name))[2] = t.id::text
 create policy "Admins can view all profiles" on public.profiles
   for select using (public.is_admin());
 
