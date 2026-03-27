@@ -1,4 +1,4 @@
-a-- ============================================================
+-- ============================================================
 -- Manzione Properties - Complete Database Schema
 -- Run this in your Supabase SQL editor to set up the database
 -- ============================================================
@@ -387,7 +387,16 @@ create policy "Admins can manage documents" on public.documents
 
 create policy "Tenants can view own documents" on public.documents
   for select using (
-    exists (select 1 from public.profiles where id = auth.uid() and tenant_id = public.documents.tenant_id)
+    exists (
+      select 1
+      from public.profiles p
+      join public.tenants t on t.id = p.tenant_id
+      where p.id = auth.uid()
+        and (
+          public.documents.tenant_id = p.tenant_id
+          or public.documents.property_id = t.property_id
+        )
+    )
   );
 
 -- ============================================================

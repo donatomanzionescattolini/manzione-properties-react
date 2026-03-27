@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/layout/PageHeader';
 import { Modal } from '../../components/ui/Modal';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { toast } from '../../components/ui/toastStore';
+import { supabase } from '../../lib/supabase';
 
 const schema = z.object({
   title: z.string().min(1, 'Title required').max(100),
@@ -24,12 +25,40 @@ export function TenantMaintenance() {
   const { currentUser } = useAuthStore();
   const { tenants, maintenanceRequests, addMaintenanceRequest } = useDataStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
 
   const tenant = tenants.find((t) => t.id === currentUser?.tenantId);
 
   const myRequests = maintenanceRequests
     .filter((r) => r.tenantId === tenant?.id)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  useEffect(() => {
+    const paths = Array.from(new Set(myRequests.flatMap((r) => r.photos)));
+
+    if (paths.length === 0) {
+      setPhotoUrls({});
+      return;
+    }
+
+    let cancelled = false;
+
+    void Promise.all(
+      paths.map(async (path) => {
+        const { data, error } = await supabase.storage.from('documents').createSignedUrl(path, 3600);
+        return [path, !error && data?.signedUrl ? data.signedUrl : ''] as const;
+      })
+    ).then((entries) => {
+      if (cancelled) return;
+      setPhotoUrls(Object.fromEntries(entries.filter(([, url]) => url)));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [myRequests]);
 
   const {
     register,
@@ -40,12 +69,32 @@ export function TenantMaintenance() {
 
   const openModal = () => {
     reset({ title: '', description: '', category: 'general', priority: 'medium' });
+    setSelectedPhotos([]);
     setIsModalOpen(true);
+  };
+
+  const handlePhotoSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedPhotos(Array.from(e.target.files ?? []).slice(0, 5));
   };
 
   const onSubmit = async (data: FormData) => {
     if (!tenant) return;
     try {
+      setIsUploading(true);
+
+      const photoPaths = await Promise.all(
+        selectedPhotos.map(async (file, index) => {
+          const ext = file.name.split('.').pop() ?? 'jpg';
+          const path = `maintenance/${tenant.id}/${Date.now()}-${index}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+          const { error } = await supabase.storage.from('documents').upload(path, file, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+          if (error) throw error;
+          return path;
+        })
+      );
+
       await addMaintenanceRequest({
         tenantId: tenant.id,
         propertyId: tenant.propertyId,
@@ -54,14 +103,17 @@ export function TenantMaintenance() {
         category: data.category,
         priority: data.priority,
         status: 'pending',
-        photos: [],
+        photos: photoPaths,
         notes: [],
         submittedDate: format(new Date(), 'yyyy-MM-dd'),
       });
       toast.success('Maintenance request submitted!');
       setIsModalOpen(false);
+      setSelectedPhotos([]);
     } catch {
       toast.error('Failed to submit request');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -140,7 +192,26 @@ export function TenantMaintenance() {
                     Completed: {format(new Date(r.completedDate), 'MMM d, yyyy')}
                   </span>
                 )}
+                {r.photos.length > 0 && <span>{r.photos.length} photo(s)</span>}
               </div>
+              {r.photos.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {r.photos.map((path, index) =>
+                    photoUrls[path] ? (
+                      <a
+                        key={path}
+                        href={photoUrls[path]}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50"
+                      >
+                        <img src={photoUrls[path]} alt={`Maintenance photo ${index + 1}`} className="h-24 w-full object-cover group-hover:opacity-90" />
+                        <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">View</span>
+                      </a>
+                    ) : null
+                  )}
+                </div>
+              )}
               {r.notes.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
                   <p className="text-xs font-medium text-gray-500">Updates from property manager:</p>
@@ -167,7 +238,9 @@ export function TenantMaintenance() {
         footer={
           <>
             <button onClick={() => setIsModalOpen(false)} className="btn-outline">Cancel</button>
-            <button onClick={handleSubmit(onSubmit as SubmitHandler<FormData>)} className="btn-primary">Submit Request</button>
+            <button onClick={handleSubmit(onSubmit as SubmitHandler<FormData>)} className="btn-primary" disabled={isUploading}>
+              {isUploading ? 'Uploading…' : 'Submit Request'}
+            </button>
           </>
         }
       >
@@ -213,6 +286,21 @@ export function TenantMaintenance() {
                 <option value="emergency">Emergency — Immediate</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label className="label">Photos (optional, up to 5)</label>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handlePhotoSelection}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary-light cursor-pointer"
+            />
+            {selectedPhotos.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                Selected: {selectedPhotos.map((file) => file.name).join(', ')}
+              </p>
+            )}
           </div>
           <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
             <strong>Emergency?</strong> For life-threatening emergencies, call 911 first. For urgent maintenance emergencies, please also call your property manager directly.

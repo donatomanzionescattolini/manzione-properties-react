@@ -1,9 +1,22 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { FileText, Printer } from 'lucide-react';
+import { FileText, Plus, Printer } from 'lucide-react';
 import { useDataStore } from '../../store/dataStore';
 import { PageHeader } from '../../components/layout/PageHeader';
+import { Modal } from '../../components/ui/Modal';
 import { toast } from '../../components/ui/toastStore';
+
+const expenseCategories = [
+  'repairs',
+  'utilities',
+  'property-tax',
+  'hoa',
+  'legal',
+  'management',
+  'commission',
+  'insurance',
+  'other',
+] as const;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -14,11 +27,41 @@ const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = [CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR];
 
 export function Reports() {
-  const { properties, payments, expenses, vendors } = useDataStore();
+  const { properties, payments, expenses, vendors, addExpense } = useDataStore();
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [reportType, setReportType] = useState<'monthly' | 'annual' | 'company'>('monthly');
+  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({
+    propertyId: '',
+    vendorId: '',
+    category: 'repairs' as (typeof expenseCategories)[number],
+    amount: '',
+    description: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    receiptUrl: '',
+  });
+  const [approvedReports, setApprovedReports] = useState<Record<string, boolean>>(() => {
+    const saved = window.localStorage.getItem('report-approvals');
+    if (!saved) return {};
+
+    try {
+      return JSON.parse(saved);
+    } catch {
+      window.localStorage.removeItem('report-approvals');
+      return {};
+    }
+  });
+
+  const reportKey = `${reportType}:${selectedYear}:${selectedMonth}:${selectedPropertyId || 'all'}`;
+
+  const setReportApproved = (approved: boolean) => {
+    const next = { ...approvedReports, [reportKey]: approved };
+    setApprovedReports(next);
+    window.localStorage.setItem('report-approvals', JSON.stringify(next));
+    toast.success(approved ? 'Report approved for owner review' : 'Report approval removed');
+  };
 
   const report = useMemo(() => {
     const propList = selectedPropertyId
@@ -58,10 +101,11 @@ export function Reports() {
     const hoa = byCategory('hoa');
     const legal = byCategory('legal');
     const management = byCategory('management');
+    const commissions = byCategory('commission');
     const insurance = byCategory('insurance');
     const other = byCategory('other');
 
-    const totalExpenses = repairs + utilities + propertyTax + hoa + legal + management + insurance + other;
+    const totalExpenses = repairs + utilities + propertyTax + hoa + legal + management + commissions + insurance + other;
     const netToOwner = rentCollected - totalExpenses;
 
     return {
@@ -72,12 +116,31 @@ export function Reports() {
       hoa,
       legal,
       management,
+      commissions,
       insurance,
       other,
       totalExpenses,
       netToOwner,
     };
   }, [payments, expenses, properties, selectedPropertyId, selectedYear, selectedMonth, reportType]);
+
+  const recentExpenses = useMemo(() => {
+    return expenses
+      .filter((e) => !selectedPropertyId || e.propertyId === selectedPropertyId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 8);
+  }, [expenses, selectedPropertyId]);
+
+  const getPropertyAddress = (propertyId: string) => {
+    const property = properties.find((p) => p.id === propertyId);
+    return property ? property.address : 'Unknown';
+  };
+
+  const getVendorName = (vendorId?: string) => {
+    if (!vendorId) return '—';
+    const vendor = vendors.find((v) => v.id === vendorId);
+    return vendor?.name ?? 'Unknown';
+  };
 
   // 1099 vendors: paid > $600 for the year
   const vendorPayments = useMemo(() => {
@@ -96,6 +159,38 @@ export function Reports() {
     toast.info('Print dialog opened');
   };
 
+  const handleExpenseSubmit = async () => {
+    if (!expenseForm.propertyId || !expenseForm.amount || !expenseForm.description || !expenseForm.date) {
+      toast.error('Property, amount, description, and date are required');
+      return;
+    }
+
+    try {
+      await addExpense({
+        propertyId: expenseForm.propertyId,
+        vendorId: expenseForm.vendorId || undefined,
+        category: expenseForm.category,
+        amount: Number(expenseForm.amount),
+        description: expenseForm.description,
+        date: expenseForm.date,
+        receiptUrl: expenseForm.receiptUrl || undefined,
+      });
+      toast.success('Expense recorded');
+      setIsExpenseModalOpen(false);
+      setExpenseForm({
+        propertyId: selectedPropertyId || '',
+        vendorId: '',
+        category: 'repairs',
+        amount: '',
+        description: '',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        receiptUrl: '',
+      });
+    } catch {
+      toast.error('Failed to record expense');
+    }
+  };
+
   const formatCurrency = (amount: number) =>
     `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -112,9 +207,23 @@ export function Reports() {
         title="Reports"
         subtitle="Financial reporting and tax summaries"
         actions={
-          <button onClick={handlePrint} className="btn-outline">
-            <Printer size={16} /> Print
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setExpenseForm((current) => ({
+                  ...current,
+                  propertyId: selectedPropertyId || current.propertyId,
+                }));
+                setIsExpenseModalOpen(true);
+              }}
+              className="btn-primary"
+            >
+              <Plus size={16} /> Add Expense
+            </button>
+            <button onClick={handlePrint} className="btn-outline">
+              <Printer size={16} /> Print
+            </button>
+          </div>
         }
       />
 
@@ -185,7 +294,18 @@ export function Reports() {
               Generated {format(new Date(), 'MMMM d, yyyy h:mm a')}
             </p>
           </div>
-          <FileText size={28} className="text-primary opacity-30" />
+          <div className="flex items-center gap-3">
+            <span className={approvedReports[reportKey] ? 'badge-green' : 'badge-yellow'}>
+              {approvedReports[reportKey] ? 'Approved' : 'Pending Review'}
+            </span>
+            <button
+              onClick={() => setReportApproved(!approvedReports[reportKey])}
+              className={approvedReports[reportKey] ? 'btn-outline btn-sm' : 'btn-primary btn-sm'}
+            >
+              {approvedReports[reportKey] ? 'Revoke Approval' : 'Approve Report'}
+            </button>
+            <FileText size={28} className="text-primary opacity-30" />
+          </div>
         </div>
 
         <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -210,6 +330,7 @@ export function Reports() {
               ['HOA Fees', report.hoa],
               ['Legal Fees', report.legal],
               ['Management Fees', report.management],
+              ['Commissions', report.commissions],
               ['Insurance', report.insurance],
               ['Other', report.other],
             ].map(([label, amount]) => (
@@ -234,6 +355,38 @@ export function Reports() {
       </div>
 
       <div className="page-card">
+        <h2 className="text-base font-semibold text-gray-800 mb-4">Recent Expenses</h2>
+        {recentExpenses.length === 0 ? (
+          <p className="text-sm text-gray-400 mb-6">No expenses recorded yet. Add expenses to improve owner and tax reporting.</p>
+        ) : (
+          <div className="overflow-x-auto mb-6">
+            <table className="w-full min-w-[760px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="table-th">Date</th>
+                  <th className="table-th">Property</th>
+                  <th className="table-th">Category</th>
+                  <th className="table-th">Vendor</th>
+                  <th className="table-th">Description</th>
+                  <th className="table-th">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentExpenses.map((expense) => (
+                  <tr key={expense.id} className="hover:bg-gray-50">
+                    <td className="table-td">{format(new Date(expense.date), 'MMM d, yyyy')}</td>
+                    <td className="table-td">{getPropertyAddress(expense.propertyId)}</td>
+                    <td className="table-td capitalize">{expense.category}</td>
+                    <td className="table-td">{getVendorName(expense.vendorId)}</td>
+                    <td className="table-td">{expense.description}</td>
+                    <td className="table-td font-semibold text-red-600">{formatCurrency(expense.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         <h2 className="text-base font-semibold text-gray-800 mb-4">
           1099 Summary — {selectedYear}
         </h2>
@@ -295,6 +448,98 @@ export function Reports() {
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={isExpenseModalOpen}
+        onClose={() => setIsExpenseModalOpen(false)}
+        title="Add Expense"
+        size="md"
+        footer={
+          <>
+            <button onClick={() => setIsExpenseModalOpen(false)} className="btn-outline">Cancel</button>
+            <button onClick={handleExpenseSubmit} className="btn-primary">Save Expense</button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="label">Property</label>
+            <select
+              value={expenseForm.propertyId}
+              onChange={(e) => setExpenseForm((current) => ({ ...current, propertyId: e.target.value }))}
+              className="input-field"
+            >
+              <option value="">Select property</option>
+              {properties.map((property) => (
+                <option key={property.id} value={property.id}>{property.address}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Category</label>
+            <select
+              value={expenseForm.category}
+              onChange={(e) => setExpenseForm((current) => ({ ...current, category: e.target.value as (typeof expenseCategories)[number] }))}
+              className="input-field"
+            >
+              {expenseCategories.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Vendor (optional)</label>
+            <select
+              value={expenseForm.vendorId}
+              onChange={(e) => setExpenseForm((current) => ({ ...current, vendorId: e.target.value }))}
+              className="input-field"
+            >
+              <option value="">No vendor</option>
+              {vendors.map((vendor) => (
+                <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Amount ($)</label>
+            <input
+              value={expenseForm.amount}
+              onChange={(e) => setExpenseForm((current) => ({ ...current, amount: e.target.value }))}
+              type="number"
+              min={0}
+              step="0.01"
+              className="input-field"
+            />
+          </div>
+          <div>
+            <label className="label">Date</label>
+            <input
+              value={expenseForm.date}
+              onChange={(e) => setExpenseForm((current) => ({ ...current, date: e.target.value }))}
+              type="date"
+              className="input-field"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="label">Description</label>
+            <input
+              value={expenseForm.description}
+              onChange={(e) => setExpenseForm((current) => ({ ...current, description: e.target.value }))}
+              className="input-field"
+              placeholder="Describe the expense"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="label">Receipt URL (optional)</label>
+            <input
+              value={expenseForm.receiptUrl}
+              onChange={(e) => setExpenseForm((current) => ({ ...current, receiptUrl: e.target.value }))}
+              className="input-field"
+              placeholder="https://..."
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

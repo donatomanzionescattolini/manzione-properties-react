@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/authStore';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { toast } from '../../components/ui/toastStore';
+import { supabase } from '../../lib/supabase';
 import type { Document } from '../../types';
 
 function formatBytes(bytes: number) {
@@ -23,12 +24,29 @@ export function TenantDocuments() {
     .filter((d) => d.tenantId === tenant?.id || d.propertyId === tenant?.propertyId)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  const handleDownload = (doc: Document) => {
-    const link = document.createElement('a');
-    link.href = doc.url;
-    link.download = doc.name;
-    link.click();
-    toast.success('Download started');
+  const handleDownload = async (doc: Document) => {
+    try {
+      const legacyPublicPrefix = '/storage/v1/object/public/documents/';
+      const legacySignPrefix = '/storage/v1/object/sign/documents/';
+      let storagePath = doc.url;
+
+      if (doc.url.includes(legacyPublicPrefix)) {
+        storagePath = doc.url.split(legacyPublicPrefix)[1]?.split('?')[0] ?? doc.url;
+      } else if (doc.url.includes(legacySignPrefix)) {
+        storagePath = doc.url.split(legacySignPrefix)[1]?.split('?')[0] ?? doc.url;
+      }
+
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(storagePath, 60);
+
+      if (error || !data?.signedUrl) throw error ?? new Error('Signed URL unavailable');
+
+      window.open(data.signedUrl, '_blank');
+      toast.success('Download started');
+    } catch {
+      toast.error('Failed to prepare secure download');
+    }
   };
 
   const typeBadge: Record<string, string> = {

@@ -98,13 +98,6 @@ export function Documents() {
 
       setUploadProgress(70);
 
-      // Get a signed URL (private bucket) or public URL
-      const { data: urlData } = supabase.storage
-        .from('documents')
-        .getPublicUrl(storagePath);
-
-      const fileUrl = urlData?.publicUrl ?? storagePath;
-
       setUploadProgress(90);
 
       await addDocument({
@@ -112,7 +105,7 @@ export function Documents() {
         propertyId: data.propertyId || undefined,
         tenantId: data.tenantId || undefined,
         name: selectedFile.name,
-        url: fileUrl,
+        url: storagePath,
         size: selectedFile.size,
         mimeType: selectedFile.type || 'application/octet-stream',
         description: data.description,
@@ -134,23 +127,26 @@ export function Documents() {
 
   const handleDownload = async (doc: Document) => {
     try {
-      // Try to get a signed URL for private buckets
-      const urlParts = doc.url.split('/storage/v1/object/public/documents/');
-      if (urlParts.length === 2) {
-        const { data, error } = await supabase.storage
-          .from('documents')
-          .createSignedUrl(urlParts[1], 60); // 60 second signed URL
-        if (!error && data?.signedUrl) {
-          window.open(data.signedUrl, '_blank');
-          toast.success('Download started');
-          return;
-        }
+      const legacyPublicPrefix = '/storage/v1/object/public/documents/';
+      const legacySignPrefix = '/storage/v1/object/sign/documents/';
+      let storagePath = doc.url;
+
+      if (doc.url.includes(legacyPublicPrefix)) {
+        storagePath = doc.url.split(legacyPublicPrefix)[1]?.split('?')[0] ?? doc.url;
+      } else if (doc.url.includes(legacySignPrefix)) {
+        storagePath = doc.url.split(legacySignPrefix)[1]?.split('?')[0] ?? doc.url;
       }
-      // Fallback: open URL directly
-      window.open(doc.url, '_blank');
+
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(storagePath, 60);
+
+      if (error || !data?.signedUrl) throw error ?? new Error('Signed URL unavailable');
+
+      window.open(data.signedUrl, '_blank');
       toast.success('Download started');
     } catch {
-      window.open(doc.url, '_blank');
+      toast.error('Failed to prepare secure download');
     }
   };
 

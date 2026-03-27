@@ -319,20 +319,39 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           isLoading: false,
         });
       } else {
-        // Tenant: only load their own data
-        const [propertiesRes, tenantsRes, paymentsRes, lateFeesRes, maintenanceRes, documentsRes] =
+        // Tenant: load only their own records, plus property-level documents
+        const [propertiesRes, tenantsRes, paymentsRes, lateFeesRes, maintenanceRes] =
           await Promise.all([
             supabase.from('properties').select('*'),
-            supabase.from('tenants').select('*').eq('id', tenantId!),
+            supabase.from('tenants').select('*').eq('id', tenantId!).single(),
             supabase.from('payments').select('*').eq('tenant_id', tenantId!).order('created_at', { ascending: false }),
             supabase.from('late_fees').select('*').eq('tenant_id', tenantId!),
             supabase.from('maintenance_requests').select('*, maintenance_notes(*)').eq('tenant_id', tenantId!).order('created_at', { ascending: false }),
-            supabase.from('documents').select('*').eq('tenant_id', tenantId!).order('created_at', { ascending: false }),
           ]);
+
+        const tenantRow = tenantsRes.data;
+        let documents: Document[] = [];
+
+        if (tenantRow) {
+          const [tenantDocsRes, propertyDocsRes] = await Promise.all([
+            supabase.from('documents').select('*').eq('tenant_id', tenantId!).order('created_at', { ascending: false }),
+            supabase.from('documents').select('*').eq('property_id', tenantRow.property_id).order('created_at', { ascending: false }),
+          ]);
+
+          const mergedDocs = [...(tenantDocsRes.data ?? []), ...(propertyDocsRes.data ?? [])];
+          const seen = new Set<string>();
+          documents = mergedDocs
+            .filter((doc) => {
+              if (seen.has(doc.id)) return false;
+              seen.add(doc.id);
+              return true;
+            })
+            .map(toDocument);
+        }
 
         set({
           properties: (propertiesRes.data ?? []).map(toProperty),
-          tenants: (tenantsRes.data ?? []).map(toTenant),
+          tenants: tenantRow ? [toTenant(tenantRow)] : [],
           payments: (paymentsRes.data ?? []).map(toPayment),
           lateFees: (lateFeesRes.data ?? []).map(toLateFee),
           maintenanceRequests: (maintenanceRes.data ?? []).map(toMaintenanceRequest),
@@ -340,7 +359,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           owners: [],
           expenses: [],
           escrowTransactions: [],
-          documents: (documentsRes.data ?? []).map(toDocument),
+          documents,
           isLoading: false,
         });
       }
@@ -771,11 +790,17 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
     // Get the document URL to delete from storage too
     const doc = get().documents.find((d) => d.id === id);
     if (doc?.url) {
-      // Extract storage path from the URL
-      const urlParts = doc.url.split('/storage/v1/object/public/documents/');
-      if (urlParts.length === 2) {
-        await supabase.storage.from('documents').remove([urlParts[1]]);
+      const legacyPublicPrefix = '/storage/v1/object/public/documents/';
+      const legacySignPrefix = '/storage/v1/object/sign/documents/';
+      let storagePath = doc.url;
+
+      if (doc.url.includes(legacyPublicPrefix)) {
+        storagePath = doc.url.split(legacyPublicPrefix)[1]?.split('?')[0] ?? doc.url;
+      } else if (doc.url.includes(legacySignPrefix)) {
+        storagePath = doc.url.split(legacySignPrefix)[1]?.split('?')[0] ?? doc.url;
       }
+
+      await supabase.storage.from('documents').remove([storagePath]);
     }
     const { error } = await supabase.from('documents').delete().eq('id', id);
     if (error) throw error;
