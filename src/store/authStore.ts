@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import { useDataStore } from './dataStore';
 import type { User } from '../types';
+import type { Session } from '@supabase/supabase-js';
 
 interface AuthState {
   currentUser: User | null;
@@ -11,6 +13,49 @@ interface AuthState {
   initialize: () => Promise<void>;
 }
 
+async function loadCurrentUserFromSession(session: Session | null) {
+  if (!session?.user) return null;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.user.id)
+    .single();
+
+  if (!profile) return null;
+
+  return {
+    id: session.user.id,
+    email: session.user.email!,
+    name: profile.name,
+    role: profile.role as 'admin' | 'tenant',
+    tenantId: profile.tenant_id ?? undefined,
+    createdAt: profile.created_at,
+  } satisfies User;
+}
+
+function isInvalidSessionError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+
+  return [
+    'Invalid Refresh Token',
+    'Refresh Token Not Found',
+    'Auth session missing',
+    'JWT expired',
+  ].some((message) => error.message.includes(message));
+}
+
+async function clearInvalidSession(set: (partial: Partial<AuthState>) => void) {
+  useDataStore.getState().resetData();
+  set({ currentUser: null, isLoading: false });
+
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // Ignore cleanup failures; local auth state has already been cleared.
+  }
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   currentUser: null,
   isLoading: true,
@@ -18,58 +63,37 @@ export const useAuthStore = create<AuthState>((set) => ({
   initialize: async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile) {
-          set({
-            currentUser: {
-              id: session.user.id,
-              email: session.user.email!,
-              name: profile.name,
-              role: profile.role as 'admin' | 'tenant',
-              tenantId: profile.tenant_id ?? undefined,
-              createdAt: profile.created_at,
-            },
-          });
-        }
-      }
+      const currentUser = await loadCurrentUserFromSession(session);
+      set({ currentUser });
     } catch (err) {
+      if (isInvalidSessionError(err)) {
+        await clearInvalidSession(set);
+        return;
+      }
+
       console.error('Auth initialization error:', err);
     } finally {
       set({ isLoading: false });
     }
 
-    // Listen for auth state changes (tab switching, token refresh, etc.)
-    // Note: SIGNED_IN is intentionally excluded — login() handles that directly
-    // to avoid a race condition between the two async profile fetches.
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
+        useDataStore.getState().resetData();
         set({ currentUser: null });
         return;
       }
-      if (event === 'TOKEN_REFRESHED' && session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
 
-        if (profile) {
-          set({
-            currentUser: {
-              id: session.user.id,
-              email: session.user.email!,
-              name: profile.name,
-              role: profile.role as 'admin' | 'tenant',
-              tenantId: profile.tenant_id ?? undefined,
-              createdAt: profile.created_at,
-            },
-          });
+      if (['SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED', 'INITIAL_SESSION'].includes(event)) {
+        try {
+          const currentUser = await loadCurrentUserFromSession(session);
+          set({ currentUser });
+        } catch (err) {
+          if (isInvalidSessionError(err)) {
+            await clearInvalidSession(set);
+            return;
+          }
+
+          console.error('Auth state sync error:', err);
         }
       }
     });
@@ -78,39 +102,27 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error || !data.user) {
+    if (error || !data.user || !data.session) {
       return {
         success: false,
-        message: error?.message ?? 'Invalid email or password',
+        message: error?.message ?? 'Sign-in succeeded, but no active session was created. Please try again.',
       };
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
+    const currentUser = await loadCurrentUserFromSession(data.session);
 
-    if (profileError || !profile) {
+    if (!currentUser) {
       return { success: false, message: 'User profile not found. Contact your administrator.' };
     }
 
-    set({
-      currentUser: {
-        id: data.user.id,
-        email: data.user.email!,
-        name: profile.name,
-        role: profile.role as 'admin' | 'tenant',
-        tenantId: profile.tenant_id ?? undefined,
-        createdAt: profile.created_at,
-      },
-    });
+    set({ currentUser });
 
-    return { success: true, role: profile.role as 'admin' | 'tenant' };
+    return { success: true, role: currentUser.role };
   },
 
   logout: async () => {
     await supabase.auth.signOut();
+    useDataStore.getState().resetData();
     set({ currentUser: null });
   },
 

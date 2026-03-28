@@ -224,6 +224,7 @@ interface DataStoreState {
   isLoading: boolean;
   error: string | null;
 
+  resetData: () => void;
   loadData: (role: 'admin' | 'tenant', tenantId?: string) => Promise<void>;
 
   addProperty: (data: Omit<Property, 'id' | 'createdAt'>) => Promise<Property>;
@@ -275,6 +276,21 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
   documents: [],
   isLoading: false,
   error: null,
+
+  resetData: () => set({
+    properties: [],
+    tenants: [],
+    payments: [],
+    lateFees: [],
+    maintenanceRequests: [],
+    vendors: [],
+    owners: [],
+    expenses: [],
+    escrowTransactions: [],
+    documents: [],
+    isLoading: false,
+    error: null,
+  }),
 
   // ── Load all data from Supabase ───────────────────────────────────────
   loadData: async (role, tenantId) => {
