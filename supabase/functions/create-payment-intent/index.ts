@@ -2,10 +2,6 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@17';
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
-  apiVersion: '2025-05-28.basil',
-});
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -17,6 +13,18 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY')?.trim();
+    if (!stripeSecretKey) {
+      return new Response(
+        JSON.stringify({ error: 'Stripe is not configured for card payments. Add STRIPE_SECRET_KEY to your Supabase Edge Function secrets.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const stripe = new Stripe(stripeSecretKey, {
+      apiVersion: '2025-05-28.basil',
+    });
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -41,6 +49,13 @@ Deno.serve(async (req) => {
     }
 
     const { amount, tenantId, propertyId, tenantName, propertyAddress } = await req.json();
+
+    if (!tenantId || !propertyId || !tenantName || !propertyAddress) {
+      return new Response(
+        JSON.stringify({ error: 'tenantId, propertyId, tenantName, and propertyAddress are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const { data: profile } = await supabaseAdmin
       .from('profiles')
@@ -68,7 +83,7 @@ Deno.serve(async (req) => {
     const paymentIntent = await stripe.paymentIntents.create({
       amount, // already in cents
       currency: 'usd',
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ['card'],
       metadata: {
         tenantId,
         propertyId,
@@ -79,7 +94,7 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ clientSecret: paymentIntent.client_secret }),
+      JSON.stringify({ clientSecret: paymentIntent.client_secret, livemode: paymentIntent.livemode }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {

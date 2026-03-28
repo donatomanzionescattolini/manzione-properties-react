@@ -20,7 +20,7 @@ import { useAuthStore } from '../../store/authStore';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { toast } from '../../components/ui/toastStore';
 import { supabase } from '../../lib/supabase';
-import { stripePromise, stripeEnabled } from '../../lib/stripe';
+import { getStripePublishableKeyMode, stripePromise, stripeEnabled } from '../../lib/stripe';
 import type { Payment } from '../../types';
 
 const schema = z.object({
@@ -70,10 +70,26 @@ function StripePaymentForm({
     setCardError(null);
 
     try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error(sessionError.message);
+      }
+
+      if (!session?.access_token) {
+        throw new Error('Your session has expired. Please sign in again before making a payment.');
+      }
+
       // 1. Create a Payment Intent via Supabase Edge Function
       const { data: intentData, error: intentError } = await supabase.functions.invoke(
         'create-payment-intent',
         {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
           body: {
             amount: Math.round(amount * 100), // cents
             tenantId: tenant.id,
@@ -84,8 +100,22 @@ function StripePaymentForm({
         }
       );
 
+      const stripeMode = getStripePublishableKeyMode();
+      if (stripeMode && typeof intentData?.livemode === 'boolean') {
+        const intentMode = intentData.livemode ? 'live' : 'test';
+        if (intentMode !== stripeMode) {
+          throw new Error(
+            `Stripe key mismatch: the app is using a ${stripeMode} publishable key but the payment intent was created in ${intentMode} mode. Make sure VITE_STRIPE_PUBLISHABLE_KEY and STRIPE_SECRET_KEY are both from Stripe ${stripeMode} mode.`
+          );
+        }
+      }
+
       if (intentError || !intentData?.clientSecret) {
-        throw new Error(intentError?.message ?? 'Failed to create payment intent');
+        const functionMessage =
+          typeof intentData?.error === 'string'
+            ? intentData.error
+            : intentError?.message;
+        throw new Error(functionMessage ?? 'Failed to create payment intent');
       }
 
       // 2. Confirm card payment with Stripe
@@ -107,8 +137,15 @@ function StripePaymentForm({
 
       if (stripeError) {
         setCardError(stripeError.message ?? 'Payment failed');
-        setLoading(false);
         return;
+      }
+
+      if (!paymentIntent) {
+        throw new Error('Stripe did not return a payment result. Please try again.');
+      }
+
+      if (!['succeeded', 'processing'].includes(paymentIntent.status)) {
+        throw new Error(`Payment was not completed. Stripe status: ${paymentIntent.status}`);
       }
 
       // 3. Record payment in database
@@ -119,10 +156,14 @@ function StripePaymentForm({
         date: format(new Date(), 'yyyy-MM-dd'),
         method: 'stripe',
         reference: paymentIntent?.id,
-        status: paymentIntent?.status === 'succeeded' ? 'completed' : 'pending',
+        status: paymentIntent.status === 'succeeded' ? 'completed' : 'pending',
       });
 
-      toast.success('Payment processed successfully!');
+      toast.success(
+        paymentIntent.status === 'succeeded'
+          ? 'Payment processed successfully!'
+          : 'Payment submitted and is processing.'
+      );
       onSuccess(payment);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Payment failed';
