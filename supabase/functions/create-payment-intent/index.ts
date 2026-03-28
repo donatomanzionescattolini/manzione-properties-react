@@ -24,6 +24,7 @@ Deno.serve(async (req) => {
     const stripe = new Stripe(stripeSecretKey, {
       apiVersion: '2025-05-28.basil',
     });
+    const stripeAccount = await stripe.accounts.retrieve();
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -32,18 +33,19 @@ Deno.serve(async (req) => {
     );
 
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+
+    if (!token) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: userError?.message ?? 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -94,7 +96,11 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ clientSecret: paymentIntent.client_secret, livemode: paymentIntent.livemode }),
+      JSON.stringify({
+        clientSecret: paymentIntent.client_secret,
+        livemode: paymentIntent.livemode,
+        stripeAccountId: stripeAccount.id,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {

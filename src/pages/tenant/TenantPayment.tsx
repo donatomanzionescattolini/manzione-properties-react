@@ -136,7 +136,13 @@ function StripePaymentForm({
       );
 
       if (stripeError) {
-        setCardError(stripeError.message ?? 'Payment failed');
+        const isMissingPaymentIntent = stripeError.message?.includes('No such payment_intent');
+        const message = isMissingPaymentIntent
+          ? `Stripe key mismatch: the payment intent was created in Stripe account ${intentData.stripeAccountId ?? 'unknown'}, but the browser is using a different publishable key. Update VITE_STRIPE_PUBLISHABLE_KEY to the test publishable key from that same Stripe account and redeploy the frontend.`
+          : (stripeError.message ?? 'Payment failed');
+
+        setCardError(message);
+        toast.error(message);
         return;
       }
 
