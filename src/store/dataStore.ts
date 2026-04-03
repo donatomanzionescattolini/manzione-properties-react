@@ -12,6 +12,7 @@ import type {
   Expense,
   EscrowTransaction,
   Document,
+  Appliance,
 } from '../types';
 
 // ─── DB Row → App Type Mappers ─────────────────────────────────────────────
@@ -208,6 +209,25 @@ function toDocument(r: any): Document {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toAppliance(r: any): Appliance {
+  return {
+    id: r.id,
+    propertyId: r.property_id ?? undefined,
+    name: r.name,
+    category: r.category,
+    brand: r.brand,
+    model: r.model ?? undefined,
+    serialNumber: r.serial_number ?? undefined,
+    purchaseDate: r.purchase_date ?? undefined,
+    warrantyExpiry: r.warranty_expiry ?? undefined,
+    status: r.status,
+    notes: r.notes ?? undefined,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at ?? undefined,
+  };
+}
+
 // ─── Store Interface ───────────────────────────────────────────────────────
 
 interface DataStoreState {
@@ -221,6 +241,7 @@ interface DataStoreState {
   expenses: Expense[];
   escrowTransactions: EscrowTransaction[];
   documents: Document[];
+  appliances: Appliance[];
   isLoading: boolean;
   error: string | null;
 
@@ -258,6 +279,10 @@ interface DataStoreState {
   addDocument: (data: Omit<Document, 'id' | 'createdAt'>) => Promise<Document>;
   deleteDocument: (id: string) => Promise<void>;
 
+  addAppliance: (data: Omit<Appliance, 'id' | 'createdAt'>) => Promise<Appliance>;
+  updateAppliance: (id: string, data: Partial<Appliance>) => Promise<void>;
+  deleteAppliance: (id: string) => Promise<void>;
+
   generateLateFees: (currentUser: string) => Promise<LateFee[]>;
 }
 
@@ -274,6 +299,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
   expenses: [],
   escrowTransactions: [],
   documents: [],
+  appliances: [],
   isLoading: false,
   error: null,
 
@@ -288,6 +314,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
     expenses: [],
     escrowTransactions: [],
     documents: [],
+    appliances: [],
     isLoading: false,
     error: null,
   }),
@@ -308,6 +335,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           expensesRes,
           escrowRes,
           documentsRes,
+          appliancesRes,
         ] = await Promise.all([
           supabase.from('properties').select('*').order('created_at'),
           supabase.from('tenants').select('*').order('created_at'),
@@ -319,6 +347,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           supabase.from('expenses').select('*').order('date', { ascending: false }),
           supabase.from('escrow_transactions').select('*').order('created_at', { ascending: false }),
           supabase.from('documents').select('*').order('created_at', { ascending: false }),
+          supabase.from('appliances').select('*').order('created_at', { ascending: false }),
         ]);
 
         set({
@@ -332,6 +361,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           expenses: (expensesRes.data ?? []).map(toExpense),
           escrowTransactions: (escrowRes.data ?? []).map(toEscrow),
           documents: (documentsRes.data ?? []).map(toDocument),
+          appliances: (appliancesRes.data ?? []).map(toAppliance),
           isLoading: false,
         });
       } else {
@@ -821,6 +851,59 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
     const { error } = await supabase.from('documents').delete().eq('id', id);
     if (error) throw error;
     set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
+  },
+
+  // ── Appliances ────────────────────────────────────────────────────────
+  addAppliance: async (data) => {
+    const { data: row, error } = await supabase
+      .from('appliances')
+      .insert({
+        property_id: data.propertyId ?? null,
+        name: data.name,
+        category: data.category,
+        brand: data.brand,
+        model: data.model ?? null,
+        serial_number: data.serialNumber ?? null,
+        purchase_date: data.purchaseDate ?? null,
+        warranty_expiry: data.warrantyExpiry ?? null,
+        status: data.status,
+        notes: data.notes ?? null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    const item = toAppliance(row);
+    set((s) => ({ appliances: [item, ...s.appliances] }));
+    return item;
+  },
+
+  updateAppliance: async (id, data) => {
+    const updates: Record<string, unknown> = {};
+    if (data.propertyId !== undefined) updates.property_id = data.propertyId ?? null;
+    if (data.name !== undefined) updates.name = data.name;
+    if (data.category !== undefined) updates.category = data.category;
+    if (data.brand !== undefined) updates.brand = data.brand;
+    if (data.model !== undefined) updates.model = data.model ?? null;
+    if (data.serialNumber !== undefined) updates.serial_number = data.serialNumber ?? null;
+    if (data.purchaseDate !== undefined) updates.purchase_date = data.purchaseDate ?? null;
+    if (data.warrantyExpiry !== undefined) updates.warranty_expiry = data.warrantyExpiry ?? null;
+    if (data.status !== undefined) updates.status = data.status;
+    if (data.notes !== undefined) updates.notes = data.notes ?? null;
+    updates.updated_at = new Date().toISOString();
+
+    const { error } = await supabase.from('appliances').update(updates).eq('id', id);
+    if (error) throw error;
+    set((s) => ({
+      appliances: s.appliances.map((a) =>
+        a.id === id ? { ...a, ...data, updatedAt: updates.updated_at as string } : a
+      ),
+    }));
+  },
+
+  deleteAppliance: async (id) => {
+    const { error } = await supabase.from('appliances').delete().eq('id', id);
+    if (error) throw error;
+    set((s) => ({ appliances: s.appliances.filter((a) => a.id !== id) }));
   },
 
   // ── Generate Late Fees ────────────────────────────────────────────────

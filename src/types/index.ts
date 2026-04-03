@@ -191,4 +191,33 @@ export interface Document {
   createdAt: string;
 }
 
+export type ApplianceCategory =
+  | 'refrigerator'
+  | 'stove'
+  | 'oven'
+  | 'dishwasher'
+  | 'washing-machine'
+  | 'dryer'
+  | 'microwave'
+  | 'air-conditioner'
+  | 'water-heater'
+  | 'garbage-disposal'
+  | 'other';
 
+export type ApplianceStatus = 'working' | 'needs-repair' | 'out-of-service' | 'replaced';
+
+export interface Appliance {
+  id: string;
+  propertyId?: string;
+  name: string;
+  category: ApplianceCategory;
+  brand: string;
+  model?: string;
+  serialNumber?: string;
+  purchaseDate?: string;
+  warrantyExpiry?: string;
+  status: ApplianceStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}

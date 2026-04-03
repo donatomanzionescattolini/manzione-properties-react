@@ -13,6 +13,7 @@ import { Reports } from '../pages/admin/Reports';
 import { Escrow } from '../pages/admin/Escrow';
 import { CRM } from '../pages/admin/CRM';
 import { Documents } from '../pages/admin/Documents';
+import { Appliances } from '../pages/admin/Appliances';
 import { TenantHome } from '../pages/tenant/TenantHome';
 import { TenantPayment } from '../pages/tenant/TenantPayment';
 import { TenantHistory } from '../pages/tenant/TenantHistory';
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
       { path: 'escrow', element: <Escrow /> },
       { path: 'crm', element: <CRM /> },
       { path: 'documents', element: <Documents /> },
+      { path: 'appliances', element: <Appliances /> },
     ],
   },
   {

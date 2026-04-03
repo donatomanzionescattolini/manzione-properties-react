@@ -16,6 +16,7 @@ import {
   ScrollText,
   Building,
   Calendar as CalendarIcon,
+  Tv2,
 } from 'lucide-react';
 
 const adminNav = [
@@ -25,6 +26,7 @@ const adminNav = [
   { label: 'Tenants', to: '/admin/tenants', icon: Users },
   { label: 'Payments', to: '/admin/payments', icon: CreditCard },
   { label: 'Maintenance', to: '/admin/maintenance', icon: Wrench },
+  { label: 'Appliances', to: '/admin/appliances', icon: Tv2 },
   { label: 'Reports', to: '/admin/reports', icon: FileText },
   { label: 'Escrow', to: '/admin/escrow', icon: Landmark },
   { label: 'CRM', to: '/admin/crm', icon: BookUser },
