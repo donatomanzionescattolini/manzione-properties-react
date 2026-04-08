@@ -27,7 +27,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = [CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR];
 
 export function Reports() {
-  const { properties, payments, expenses, vendors, addExpense } = useDataStore();
+  const { properties, payments, expenses, vendors, maintenanceRequests, tenants, addExpense } = useDataStore();
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -86,6 +86,17 @@ export function Reports() {
       return yearMatch;
     });
 
+    // Maintenance requests with actual costs in the period
+    const filteredMaintenance = maintenanceRequests.filter((r) => {
+      if (!r.completedDate) return false;
+      const d = new Date(r.completedDate);
+      const yearMatch = d.getFullYear() === selectedYear;
+      if (reportType === 'monthly') {
+        return yearMatch && d.getMonth() === selectedMonth;
+      }
+      return yearMatch;
+    });
+
     const rentCollected = filteredPayments
       .filter((p) => propList.some((pr) => pr.id === p.propertyId))
       .reduce((sum, p) => sum + p.amount, 0);
@@ -105,7 +116,12 @@ export function Reports() {
     const insurance = byCategory('insurance');
     const other = byCategory('other');
 
-    const totalExpenses = repairs + utilities + propertyTax + hoa + legal + management + commissions + insurance + other;
+    // Sum actual costs (fall back to estimated if no actual) for maintenance requests
+    const maintenanceCosts = filteredMaintenance
+      .filter((r) => propList.some((pr) => pr.id === r.propertyId))
+      .reduce((sum, r) => sum + (r.actualCost ?? r.estimatedCost ?? 0), 0);
+
+    const totalExpenses = repairs + utilities + propertyTax + hoa + legal + management + commissions + insurance + other + maintenanceCosts;
     const netToOwner = rentCollected - totalExpenses;
 
     return {
@@ -119,10 +135,12 @@ export function Reports() {
       commissions,
       insurance,
       other,
+      maintenanceCosts,
+      maintenanceItems: filteredMaintenance.filter((r) => propList.some((pr) => pr.id === r.propertyId)),
       totalExpenses,
       netToOwner,
     };
-  }, [payments, expenses, properties, selectedPropertyId, selectedYear, selectedMonth, reportType]);
+  }, [payments, expenses, maintenanceRequests, properties, selectedPropertyId, selectedYear, selectedMonth, reportType]);
 
   const recentExpenses = useMemo(() => {
     return expenses
@@ -134,6 +152,11 @@ export function Reports() {
   const getPropertyAddress = (propertyId: string) => {
     const property = properties.find((p) => p.id === propertyId);
     return property ? property.address : 'Unknown';
+  };
+
+  const getTenantName = (tenantId: string) => {
+    const t = tenants.find((x) => x.id === tenantId);
+    return t ? `${t.firstName} ${t.lastName}` : 'Unknown';
   };
 
   const getVendorName = (vendorId?: string) => {
@@ -154,43 +177,6 @@ export function Reports() {
 
   const needs1099 = vendorPayments.filter((vp) => vp.total >= 600);
 
-  const handlePrint = () => {
-    window.print();
-    toast.info('Print dialog opened');
-  };
-
-  const handleExpenseSubmit = async () => {
-    if (!expenseForm.propertyId || !expenseForm.amount || !expenseForm.description || !expenseForm.date) {
-      toast.error('Property, amount, description, and date are required');
-      return;
-    }
-
-    try {
-      await addExpense({
-        propertyId: expenseForm.propertyId,
-        vendorId: expenseForm.vendorId || undefined,
-        category: expenseForm.category,
-        amount: Number(expenseForm.amount),
-        description: expenseForm.description,
-        date: expenseForm.date,
-        receiptUrl: expenseForm.receiptUrl || undefined,
-      });
-      toast.success('Expense recorded');
-      setIsExpenseModalOpen(false);
-      setExpenseForm({
-        propertyId: selectedPropertyId || '',
-        vendorId: '',
-        category: 'repairs',
-        amount: '',
-        description: '',
-        date: format(new Date(), 'yyyy-MM-dd'),
-        receiptUrl: '',
-      });
-    } catch {
-      toast.error('Failed to record expense');
-    }
-  };
-
   const formatCurrency = (amount: number) =>
     `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -200,6 +186,149 @@ export function Reports() {
       : reportType === 'annual'
       ? `Annual ${selectedYear} Report`
       : `Company Report ${selectedYear}`;
+
+  const handlePrint = () => {
+    const propertyLabel = selectedPropertyId
+      ? (properties.find((p) => p.id === selectedPropertyId)?.address ?? 'Selected Property')
+      : 'All Properties';
+
+    const expenseRows = [
+      ['Repairs &amp; Maintenance', report.repairs],
+      ['Utilities', report.utilities],
+      ['Property Tax', report.propertyTax],
+      ['HOA Fees', report.hoa],
+      ['Legal Fees', report.legal],
+      ['Management Fees', report.management],
+      ['Commissions', report.commissions],
+      ['Insurance', report.insurance],
+      ['Other Expenses', report.other],
+      ['Maintenance Requests', report.maintenanceCosts],
+    ]
+      .filter(([, amt]) => (amt as number) > 0)
+      .map(
+        ([label, amt]) =>
+          `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${label}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${formatCurrency(amt as number)}</td></tr>`
+      )
+      .join('');
+
+    const maintenanceRows = report.maintenanceItems.length > 0
+      ? report.maintenanceItems
+          .map(
+            (r) =>
+              `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(r.completedDate!), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${getPropertyAddress(r.propertyId)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${r.title}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${getTenantName(r.tenantId)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${formatCurrency(r.actualCost ?? r.estimatedCost ?? 0)}</td></tr>`
+          )
+          .join('')
+      : `<tr><td colspan="5" style="padding:8px 12px;color:#9ca3af;text-align:center;">No completed maintenance requests in this period</td></tr>`;
+
+    const recentExpenseRows = recentExpenses
+      .map(
+        (e) =>
+          `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(e.date), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${getPropertyAddress(e.propertyId)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${e.category}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${getVendorName(e.vendorId)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${e.description}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${formatCurrency(e.amount)}</td></tr>`
+      )
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${reportTitle} — Manzione Properties</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; color: #111827; background: #fff; padding: 32px; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+    h2 { font-size: 14px; font-weight: 600; margin: 24px 0 8px; color: #374151; }
+    p { color: #6b7280; font-size: 12px; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    th { background: #f3f4f6; padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+    .header-bar { background: #0d1f2d; color: #fff; padding: 10px 14px; font-weight: 600; font-size: 12px; }
+    .section-bar { background: #f9fafb; padding: 8px 14px; font-weight: 600; font-size: 12px; color: #374151; border-top: 1px solid #e5e7eb; }
+    .total-row td { font-weight: 700; background: #f3f4f6; padding: 10px 12px; }
+    .net-row td { font-weight: 700; font-size: 14px; padding: 12px; }
+    .net-positive td { background: #ecfdf5; color: #065f46; }
+    .net-negative td { background: #fef2f2; color: #991b1b; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-yellow { background: #fef3c7; color: #92400e; }
+    .meta { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e5e7eb; }
+    @media print { body { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <div class="meta">
+    <h1>Manzione Properties</h1>
+    <h1 style="color:#0d1f2d;">${reportTitle}</h1>
+    <p style="margin-top:6px;">Property: ${propertyLabel}</p>
+    <p>Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}</p>
+    <p>Status: <span class="badge ${approvedReports[reportKey] ? 'badge-green' : 'badge-yellow'}">${approvedReports[reportKey] ? 'Approved' : 'Pending Review'}</span></p>
+  </div>
+
+  <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:24px;">
+    <div class="header-bar">Income</div>
+    <table>
+      <tr>
+        <td style="padding:10px 12px;">Rent Collected</td>
+        <td style="padding:10px 12px;text-align:right;color:#065f46;font-weight:600;">${formatCurrency(report.rentCollected)}</td>
+      </tr>
+    </table>
+    <div class="section-bar">Expenses</div>
+    <table>
+      ${expenseRows}
+      <tr class="total-row">
+        <td>Total Expenses</td>
+        <td style="text-align:right;color:#dc2626;">${formatCurrency(report.totalExpenses)}</td>
+      </tr>
+    </table>
+    <table>
+      <tr class="${report.netToOwner >= 0 ? 'net-positive' : 'net-negative'} net-row">
+        <td>Net to Owner</td>
+        <td style="text-align:right;">${formatCurrency(report.netToOwner)}</td>
+      </tr>
+    </table>
+  </div>
+
+  <h2>Maintenance Requests (Period)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Completed</th><th>Property</th><th>Request</th><th>Tenant</th><th style="text-align:right;">Cost</th>
+      </tr>
+    </thead>
+    <tbody>${maintenanceRows}</tbody>
+  </table>
+
+  <h2>Recent Expenses</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th><th>Property</th><th>Category</th><th>Vendor</th><th>Description</th><th style="text-align:right;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${recentExpenseRows || '<tr><td colspan="6" style="padding:8px 12px;color:#9ca3af;text-align:center;">No expenses recorded</td></tr>'}</tbody>
+  </table>
+
+  ${needs1099.length > 0 ? `
+  <h2>1099 Summary — ${selectedYear}</h2>
+  <table>
+    <thead><tr><th>Vendor</th><th>Category</th><th>Email</th><th style="text-align:right;">Total Paid</th></tr></thead>
+    <tbody>
+      ${needs1099.map((vp) => `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${vp.vendor.name}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${vp.vendor.category}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${vp.vendor.email}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${formatCurrency(vp.total)}</td></tr>`).join('')}
+    </tbody>
+  </table>` : ''}
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) {
+      toast.error('Pop-up blocked. Please allow pop-ups for this site.');
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    // Give styles time to apply before printing
+    win.onload = () => win.print();
+    toast.info('Report document opened');
+  };
 
   return (
     <div>

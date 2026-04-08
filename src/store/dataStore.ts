@@ -8,6 +8,7 @@ import type {
   MaintenanceRequest,
   MaintenanceNote,
   Vendor,
+  Technician,
   Owner,
   Expense,
   EscrowTransaction,
@@ -110,6 +111,7 @@ function toMaintenanceRequest(r: any): MaintenanceRequest {
     status: r.status,
     photos: r.photos ?? [],
     vendorId: r.vendor_id ?? undefined,
+    technicianId: r.technician_id ?? undefined,
     notes,
     submittedDate: r.submitted_date,
     assignedDate: r.assigned_date ?? undefined,
@@ -138,6 +140,30 @@ function toVendor(r: any): Vendor {
     status: r.status,
     notes: r.notes ?? undefined,
     createdAt: r.created_at,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toTechnician(r: any): Technician {
+  return {
+    id: r.id,
+    firstName: r.first_name,
+    lastName: r.last_name,
+    email: r.email,
+    phone: r.phone,
+    specialty: r.specialty,
+    company: r.company ?? undefined,
+    licenseNumber: r.license_number ?? undefined,
+    insuranceInfo: r.insurance_info ?? undefined,
+    hourlyRate: r.hourly_rate != null ? Number(r.hourly_rate) : undefined,
+    address: r.address ?? undefined,
+    city: r.city ?? undefined,
+    state: r.state ?? undefined,
+    zip: r.zip ?? undefined,
+    status: r.status,
+    notes: r.notes ?? undefined,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at ?? undefined,
   };
 }
 
@@ -237,6 +263,7 @@ interface DataStoreState {
   lateFees: LateFee[];
   maintenanceRequests: MaintenanceRequest[];
   vendors: Vendor[];
+  technicians: Technician[];
   owners: Owner[];
   expenses: Expense[];
   escrowTransactions: EscrowTransaction[];
@@ -268,6 +295,10 @@ interface DataStoreState {
   updateVendor: (id: string, data: Partial<Vendor>) => Promise<void>;
   deleteVendor: (id: string) => Promise<void>;
 
+  addTechnician: (data: Omit<Technician, 'id' | 'createdAt'>) => Promise<Technician>;
+  updateTechnician: (id: string, data: Partial<Technician>) => Promise<void>;
+  deleteTechnician: (id: string) => Promise<void>;
+
   addOwner: (data: Omit<Owner, 'id' | 'createdAt'>) => Promise<Owner>;
   updateOwner: (id: string, data: Partial<Owner>) => Promise<void>;
   deleteOwner: (id: string) => Promise<void>;
@@ -295,6 +326,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
   lateFees: [],
   maintenanceRequests: [],
   vendors: [],
+  technicians: [],
   owners: [],
   expenses: [],
   escrowTransactions: [],
@@ -310,6 +342,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
     lateFees: [],
     maintenanceRequests: [],
     vendors: [],
+    technicians: [],
     owners: [],
     expenses: [],
     escrowTransactions: [],
@@ -331,6 +364,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           lateFeesRes,
           maintenanceRes,
           vendorsRes,
+          techniciansRes,
           ownersRes,
           expensesRes,
           escrowRes,
@@ -343,6 +377,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           supabase.from('late_fees').select('*').order('created_at', { ascending: false }),
           supabase.from('maintenance_requests').select('*, maintenance_notes(*)').order('created_at', { ascending: false }),
           supabase.from('vendors').select('*').order('name'),
+          supabase.from('technicians').select('*').order('last_name'),
           supabase.from('owners').select('*').order('name'),
           supabase.from('expenses').select('*').order('date', { ascending: false }),
           supabase.from('escrow_transactions').select('*').order('created_at', { ascending: false }),
@@ -357,6 +392,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           lateFees: (lateFeesRes.data ?? []).map(toLateFee),
           maintenanceRequests: (maintenanceRes.data ?? []).map(toMaintenanceRequest),
           vendors: (vendorsRes.data ?? []).map(toVendor),
+          technicians: (techniciansRes.data ?? []).map(toTechnician),
           owners: (ownersRes.data ?? []).map(toOwner),
           expenses: (expensesRes.data ?? []).map(toExpense),
           escrowTransactions: (escrowRes.data ?? []).map(toEscrow),
@@ -624,6 +660,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
     if (data.status !== undefined) updates.status = data.status;
     if (data.priority !== undefined) updates.priority = data.priority;
     if (data.vendorId !== undefined) updates.vendor_id = data.vendorId;
+    if (data.technicianId !== undefined) updates.technician_id = data.technicianId;
     if (data.assignedDate !== undefined) updates.assigned_date = data.assignedDate;
     if (data.completedDate !== undefined) updates.completed_date = data.completedDate;
     if (data.estimatedCost !== undefined) updates.estimated_cost = data.estimatedCost;
@@ -709,6 +746,67 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
     const { error } = await supabase.from('vendors').delete().eq('id', id);
     if (error) throw error;
     set((s) => ({ vendors: s.vendors.filter((v) => v.id !== id) }));
+  },
+
+  // ── Technicians ───────────────────────────────────────────────────────
+  addTechnician: async (data) => {
+    const { data: row, error } = await supabase
+      .from('technicians')
+      .insert({
+        first_name: data.firstName,
+        last_name: data.lastName,
+        email: data.email,
+        phone: data.phone,
+        specialty: data.specialty,
+        company: data.company ?? null,
+        license_number: data.licenseNumber ?? null,
+        insurance_info: data.insuranceInfo ?? null,
+        hourly_rate: data.hourlyRate ?? null,
+        address: data.address ?? null,
+        city: data.city ?? null,
+        state: data.state ?? null,
+        zip: data.zip ?? null,
+        status: data.status,
+        notes: data.notes ?? null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    const item = toTechnician(row);
+    set((s) => ({ technicians: [...s.technicians, item] }));
+    return item;
+  },
+
+  updateTechnician: async (id, data) => {
+    const updates: Record<string, unknown> = {};
+    if (data.firstName !== undefined) updates.first_name = data.firstName;
+    if (data.lastName !== undefined) updates.last_name = data.lastName;
+    if (data.email !== undefined) updates.email = data.email;
+    if (data.phone !== undefined) updates.phone = data.phone;
+    if (data.specialty !== undefined) updates.specialty = data.specialty;
+    if (data.company !== undefined) updates.company = data.company;
+    if (data.licenseNumber !== undefined) updates.license_number = data.licenseNumber;
+    if (data.insuranceInfo !== undefined) updates.insurance_info = data.insuranceInfo;
+    if (data.hourlyRate !== undefined) updates.hourly_rate = data.hourlyRate;
+    if (data.address !== undefined) updates.address = data.address;
+    if (data.city !== undefined) updates.city = data.city;
+    if (data.state !== undefined) updates.state = data.state;
+    if (data.zip !== undefined) updates.zip = data.zip;
+    if (data.status !== undefined) updates.status = data.status;
+    if (data.notes !== undefined) updates.notes = data.notes;
+    updates.updated_at = new Date().toISOString();
+
+    const { error } = await supabase.from('technicians').update(updates).eq('id', id);
+    if (error) throw error;
+    set((s) => ({
+      technicians: s.technicians.map((t) => (t.id === id ? { ...t, ...data, updatedAt: updates.updated_at as string } : t)),
+    }));
+  },
+
+  deleteTechnician: async (id) => {
+    const { error } = await supabase.from('technicians').delete().eq('id', id);
+    if (error) throw error;
+    set((s) => ({ technicians: s.technicians.filter((t) => t.id !== id) }));
   },
 
   // ── Owners ────────────────────────────────────────────────────────────
