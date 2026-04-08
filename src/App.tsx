@@ -8,15 +8,17 @@ import { isSupabaseConfigured } from './lib/supabase';
 
 function SupabaseConfigError() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', padding: '2rem', textAlign: 'center' }}>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>Configuration Required</h1>
-      <p style={{ maxWidth: '480px', color: '#555', lineHeight: 1.6 }}>
+    <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center font-sans">
+      <h1 className="text-2xl font-bold mb-4">Configuration Required</h1>
+      <p className="max-w-md text-gray-600 leading-relaxed">
         The Supabase environment variables are not set.
-        Please create a <code>.env</code> file from <code>.env.example</code> and add
-        your <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> values,
+        Please create a <code className="bg-gray-100 px-1 rounded">.env</code> file
+        from <code className="bg-gray-100 px-1 rounded">.env.example</code> and add
+        your <code className="bg-gray-100 px-1 rounded">VITE_SUPABASE_URL</code> and{' '}
+        <code className="bg-gray-100 px-1 rounded">VITE_SUPABASE_ANON_KEY</code> values,
         then restart the dev server.
       </p>
-      <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#888' }}>
+      <p className="mt-4 text-sm text-gray-400">
         See <strong>SETUP.md</strong> for full instructions.
       </p>
     </div>

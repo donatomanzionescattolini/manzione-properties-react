@@ -9,8 +9,9 @@ const supabaseAnonKey = (
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 // Only instantiate the client when the required env vars are present.
-// When they are absent, `supabase` is null; App.tsx renders a config-error
-// page before any store code can call into it.
+// When they are absent, `supabase` is typed as `never` to signal that it
+// must not be accessed: App.tsx renders a config-error page and returns
+// early before any store code can call into it.
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!)
   : (null as never);
