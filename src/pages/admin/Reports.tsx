@@ -244,6 +244,17 @@ export function Reports() {
   const formatCurrency = (amount: number) =>
     `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  // Escape user-supplied text for safe HTML insertion in the print window
+  const esc = (text: string) =>
+    text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const PRINT_STYLE_LOAD_DELAY = 600; // ms – allow styles to apply before triggering print dialog
+
   const reportTitle =
     reportType === 'monthly'
       ? `${MONTHS[selectedMonth]} ${selectedYear} Report`
@@ -281,7 +292,7 @@ export function Reports() {
       ? report.markupItems
           .map(
             (m) =>
-              `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(m.date), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${m.category}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${m.description}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(m.costPaid)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(m.chargedToClient)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#065f46;font-weight:600;">${formatCurrency(m.chargedToClient - m.costPaid)}</td></tr>`
+              `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(m.date), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${esc(m.category)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(m.description)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(m.costPaid)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(m.chargedToClient)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#065f46;font-weight:600;">${formatCurrency(m.chargedToClient - m.costPaid)}</td></tr>`
           )
           .join('')
       : '';
@@ -290,7 +301,7 @@ export function Reports() {
       ? report.maintenanceItems
           .map(
             (r) =>
-              `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(r.completedDate!), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${getPropertyAddress(r.propertyId)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${r.title}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${getTenantName(r.tenantId)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${formatCurrency(r.actualCost ?? r.estimatedCost ?? 0)}</td></tr>`
+              `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(r.completedDate!), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(getPropertyAddress(r.propertyId))}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(r.title)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(getTenantName(r.tenantId))}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${formatCurrency(r.actualCost ?? r.estimatedCost ?? 0)}</td></tr>`
           )
           .join('')
       : `<tr><td colspan="5" style="padding:8px 12px;color:#9ca3af;text-align:center;">No completed maintenance requests in this period</td></tr>`;
@@ -298,7 +309,7 @@ export function Reports() {
     const recentExpenseRows = recentExpenses
       .map(
         (e) =>
-          `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(e.date), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${getPropertyAddress(e.propertyId)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${e.category}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${getVendorName(e.vendorId)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${e.description}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${formatCurrency(e.amount)}</td></tr>`
+          `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(e.date), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(getPropertyAddress(e.propertyId))}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${esc(e.category)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(getVendorName(e.vendorId))}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(e.description)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${formatCurrency(e.amount)}</td></tr>`
       )
       .join('');
 
@@ -306,7 +317,7 @@ export function Reports() {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>${reportTitle} — Manzione Properties</title>
+  <title>${esc(reportTitle)} — Manzione Properties</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; color: #111827; background: #fff; padding: 32px; }
@@ -331,8 +342,8 @@ export function Reports() {
 <body>
   <div class="meta">
     <h1>Manzione Properties</h1>
-    <h1 style="color:#0d1f2d;">${reportTitle}</h1>
-    <p style="margin-top:6px;">Property: ${propertyLabel}</p>
+    <h1 style="color:#0d1f2d;">${esc(reportTitle)}</h1>
+    <p style="margin-top:6px;">Property: ${esc(propertyLabel)}</p>
     <p>Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}</p>
     <p>Status: <span class="badge ${approvedReports[reportKey] ? 'badge-green' : 'badge-yellow'}">${approvedReports[reportKey] ? 'Approved' : 'Pending Review'}</span></p>
   </div>
@@ -405,7 +416,7 @@ export function Reports() {
   <table>
     <thead><tr><th>Vendor</th><th>Category</th><th>Email</th><th style="text-align:right;">Total Paid</th></tr></thead>
     <tbody>
-      ${needs1099.map((vp) => `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${vp.vendor.name}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${vp.vendor.category}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${vp.vendor.email}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${formatCurrency(vp.total)}</td></tr>`).join('')}
+      ${needs1099.map((vp) => `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(vp.vendor.name)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${esc(vp.vendor.category)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${esc(vp.vendor.email)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${formatCurrency(vp.total)}</td></tr>`).join('')}
     </tbody>
   </table>` : ''}
 </body>
@@ -420,7 +431,7 @@ export function Reports() {
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 600);
+    setTimeout(() => win.print(), PRINT_STYLE_LOAD_DELAY);
     toast.info('Report document opened');
   };
 
@@ -466,8 +477,8 @@ export function Reports() {
       toast.error('Please enter a description');
       return;
     }
-    if (isNaN(cost) || cost < 0) {
-      toast.error('Please enter a valid cost paid');
+    if (isNaN(cost) || cost <= 0) {
+      toast.error('Please enter a valid cost paid (must be greater than 0)');
       return;
     }
     if (isNaN(charged) || charged <= 0) {
