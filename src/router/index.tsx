@@ -9,6 +9,7 @@ import { Properties } from '../pages/admin/Properties';
 import { Tenants } from '../pages/admin/Tenants';
 import { Payments } from '../pages/admin/Payments';
 import { Maintenance } from '../pages/admin/Maintenance';
+import { Technicians } from '../pages/admin/Technicians';
 import { Reports } from '../pages/admin/Reports';
 import { Escrow } from '../pages/admin/Escrow';
 import { CRM } from '../pages/admin/CRM';
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
       { path: 'tenants', element: <Tenants /> },
       { path: 'payments', element: <Payments /> },
       { path: 'maintenance', element: <Maintenance /> },
+      { path: 'technicians', element: <Technicians /> },
       { path: 'reports', element: <Reports /> },
       { path: 'escrow', element: <Escrow /> },
       { path: 'crm', element: <CRM /> },

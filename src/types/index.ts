@@ -102,6 +102,7 @@ export interface MaintenanceRequest {
   status: MaintenanceStatus;
   photos: string[];
   vendorId?: string;
+  technicianId?: string;
   notes: MaintenanceNote[];
   submittedDate: string;
   assignedDate?: string;
@@ -129,6 +130,39 @@ export interface Vendor {
   status: 'active' | 'inactive';
   notes?: string;
   createdAt: string;
+}
+
+export type TechnicianSpecialty =
+  | 'plumbing'
+  | 'electrical'
+  | 'hvac'
+  | 'carpentry'
+  | 'painting'
+  | 'roofing'
+  | 'flooring'
+  | 'appliance-repair'
+  | 'general'
+  | 'other';
+
+export interface Technician {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  specialty: TechnicianSpecialty;
+  company?: string;
+  licenseNumber?: string;
+  insuranceInfo?: string;
+  hourlyRate?: number;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  status: 'active' | 'inactive';
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Owner {
