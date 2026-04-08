@@ -394,7 +394,6 @@ export function Technicians() {
         title="Delete Technician"
         message={`Are you sure you want to delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This cannot be undone.`}
         confirmLabel="Delete"
-        variant="danger"
       />
     </div>
   );
