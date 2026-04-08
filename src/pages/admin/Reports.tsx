@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { FileText, Plus, Printer } from 'lucide-react';
+import { FileText, Plus, Printer, Trash2 } from 'lucide-react';
 import { useDataStore } from '../../store/dataStore';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { Modal } from '../../components/ui/Modal';
@@ -18,6 +18,14 @@ const expenseCategories = [
   'other',
 ] as const;
 
+const markupCategories = [
+  'repairs',
+  'cleaning',
+  'maintenance',
+  'LLC renewal',
+  'other',
+] as const;
+
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -26,13 +34,38 @@ const MONTHS = [
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = [CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR];
 
+interface MarkupItem {
+  id: string;
+  description: string;
+  category: string;
+  costPaid: number;
+  chargedToClient: number;
+  date: string;
+}
+
+function loadMarkups(): MarkupItem[] {
+  try {
+    const raw = window.localStorage.getItem('manzione-markups');
+    if (!raw) return [];
+    return JSON.parse(raw) as MarkupItem[];
+  } catch {
+    return [];
+  }
+}
+
+function saveMarkups(items: MarkupItem[]) {
+  window.localStorage.setItem('manzione-markups', JSON.stringify(items));
+}
+
 export function Reports() {
   const { properties, payments, expenses, vendors, maintenanceRequests, tenants, addExpense } = useDataStore();
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [reportType, setReportType] = useState<'monthly' | 'annual' | 'company'>('monthly');
+  const [companyPeriod, setCompanyPeriod] = useState<'annual' | 'monthly'>('annual');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [isMarkupModalOpen, setIsMarkupModalOpen] = useState(false);
   const [expenseForm, setExpenseForm] = useState({
     propertyId: '',
     vendorId: '',
@@ -42,6 +75,14 @@ export function Reports() {
     date: format(new Date(), 'yyyy-MM-dd'),
     receiptUrl: '',
   });
+  const [markupForm, setMarkupForm] = useState({
+    description: '',
+    category: 'repairs' as string,
+    costPaid: '',
+    chargedToClient: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+  });
+  const [markupItems, setMarkupItems] = useState<MarkupItem[]>(loadMarkups);
   const [approvedReports, setApprovedReports] = useState<Record<string, boolean>>(() => {
     const saved = window.localStorage.getItem('report-approvals');
     if (!saved) return {};
@@ -54,7 +95,10 @@ export function Reports() {
     }
   });
 
-  const reportKey = `${reportType}:${selectedYear}:${selectedMonth}:${selectedPropertyId || 'all'}`;
+  const isMonthlyFilter =
+    reportType === 'monthly' || (reportType === 'company' && companyPeriod === 'monthly');
+
+  const reportKey = `${reportType}:${companyPeriod}:${selectedYear}:${selectedMonth}:${selectedPropertyId || 'all'}`;
 
   const setReportApproved = (approved: boolean) => {
     const next = { ...approvedReports, [reportKey]: approved };
@@ -71,7 +115,7 @@ export function Reports() {
     const filteredPayments = payments.filter((p) => {
       const d = new Date(p.date);
       const yearMatch = d.getFullYear() === selectedYear;
-      if (reportType === 'monthly') {
+      if (isMonthlyFilter) {
         return yearMatch && d.getMonth() === selectedMonth && p.status === 'completed';
       }
       return yearMatch && p.status === 'completed';
@@ -80,7 +124,7 @@ export function Reports() {
     const filteredExpenses = expenses.filter((e) => {
       const d = new Date(e.date);
       const yearMatch = d.getFullYear() === selectedYear;
-      if (reportType === 'monthly') {
+      if (isMonthlyFilter) {
         return yearMatch && d.getMonth() === selectedMonth;
       }
       return yearMatch;
@@ -91,7 +135,17 @@ export function Reports() {
       if (!r.completedDate) return false;
       const d = new Date(r.completedDate);
       const yearMatch = d.getFullYear() === selectedYear;
-      if (reportType === 'monthly') {
+      if (isMonthlyFilter) {
+        return yearMatch && d.getMonth() === selectedMonth;
+      }
+      return yearMatch;
+    });
+
+    // Markups in the period (company-level income)
+    const filteredMarkups = markupItems.filter((m) => {
+      const d = new Date(m.date);
+      const yearMatch = d.getFullYear() === selectedYear;
+      if (isMonthlyFilter) {
         return yearMatch && d.getMonth() === selectedMonth;
       }
       return yearMatch;
@@ -121,8 +175,15 @@ export function Reports() {
       .filter((r) => propList.some((pr) => pr.id === r.propertyId))
       .reduce((sum, r) => sum + (r.actualCost ?? r.estimatedCost ?? 0), 0);
 
+    // Markup revenue = charged - cost paid
+    const markupRevenue = filteredMarkups.reduce(
+      (sum, m) => sum + (m.chargedToClient - m.costPaid),
+      0,
+    );
+
     const totalExpenses = repairs + utilities + propertyTax + hoa + legal + management + commissions + insurance + other + maintenanceCosts;
-    const netToOwner = rentCollected - totalExpenses;
+    const totalIncome = rentCollected + markupRevenue;
+    const netToOwner = totalIncome - totalExpenses;
 
     return {
       rentCollected,
@@ -137,10 +198,13 @@ export function Reports() {
       other,
       maintenanceCosts,
       maintenanceItems: filteredMaintenance.filter((r) => propList.some((pr) => pr.id === r.propertyId)),
+      markupRevenue,
+      markupItems: filteredMarkups,
       totalExpenses,
+      totalIncome,
       netToOwner,
     };
-  }, [payments, expenses, maintenanceRequests, properties, selectedPropertyId, selectedYear, selectedMonth, reportType]);
+  }, [payments, expenses, maintenanceRequests, markupItems, properties, selectedPropertyId, selectedYear, selectedMonth, isMonthlyFilter]);
 
   const recentExpenses = useMemo(() => {
     return expenses
@@ -185,7 +249,9 @@ export function Reports() {
       ? `${MONTHS[selectedMonth]} ${selectedYear} Report`
       : reportType === 'annual'
       ? `Annual ${selectedYear} Report`
-      : `Company Report ${selectedYear}`;
+      : companyPeriod === 'monthly'
+      ? `Company Report — ${MONTHS[selectedMonth]} ${selectedYear}`
+      : `Company Report — ${selectedYear}`;
 
   const handlePrint = () => {
     const propertyLabel = selectedPropertyId
@@ -210,6 +276,15 @@ export function Reports() {
           `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${label}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${formatCurrency(amt as number)}</td></tr>`
       )
       .join('');
+
+    const markupRows = report.markupItems.length > 0
+      ? report.markupItems
+          .map(
+            (m) =>
+              `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${format(new Date(m.date), 'MMM d, yyyy')}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;">${m.category}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${m.description}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(m.costPaid)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(m.chargedToClient)}</td><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#065f46;font-weight:600;">${formatCurrency(m.chargedToClient - m.costPaid)}</td></tr>`
+          )
+          .join('')
+      : '';
 
     const maintenanceRows = report.maintenanceItems.length > 0
       ? report.maintenanceItems
@@ -269,6 +344,14 @@ export function Reports() {
         <td style="padding:10px 12px;">Rent Collected</td>
         <td style="padding:10px 12px;text-align:right;color:#065f46;font-weight:600;">${formatCurrency(report.rentCollected)}</td>
       </tr>
+      ${report.markupRevenue > 0 ? `<tr>
+        <td style="padding:10px 12px;">Markup Revenue</td>
+        <td style="padding:10px 12px;text-align:right;color:#065f46;font-weight:600;">${formatCurrency(report.markupRevenue)}</td>
+      </tr>` : ''}
+      <tr style="background:#f9fafb;">
+        <td style="padding:10px 12px;font-weight:700;">Total Income</td>
+        <td style="padding:10px 12px;text-align:right;color:#065f46;font-weight:700;">${formatCurrency(report.totalIncome)}</td>
+      </tr>
     </table>
     <div class="section-bar">Expenses</div>
     <table>
@@ -285,6 +368,17 @@ export function Reports() {
       </tr>
     </table>
   </div>
+
+  ${report.markupItems.length > 0 ? `
+  <h2>Markup Revenue Detail</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th><th>Category</th><th>Description</th><th style="text-align:right;">Cost Paid</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Markup</th>
+      </tr>
+    </thead>
+    <tbody>${markupRows}</tbody>
+  </table>` : ''}
 
   <h2>Maintenance Requests (Period)</h2>
   <table>
@@ -322,12 +416,95 @@ export function Reports() {
       toast.error('Pop-up blocked. Please allow pop-ups for this site.');
       return;
     }
+    win.document.open();
     win.document.write(html);
     win.document.close();
     win.focus();
-    // Give styles time to apply before printing
-    win.onload = () => win.print();
+    setTimeout(() => win.print(), 600);
     toast.info('Report document opened');
+  };
+
+  const handleExpenseSubmit = async () => {
+    if (!expenseForm.propertyId) {
+      toast.error('Please select a property');
+      return;
+    }
+    if (!expenseForm.amount || Number(expenseForm.amount) <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+    if (!expenseForm.description.trim()) {
+      toast.error('Please enter a description');
+      return;
+    }
+    await addExpense({
+      propertyId: expenseForm.propertyId,
+      vendorId: expenseForm.vendorId || undefined,
+      category: expenseForm.category,
+      amount: Number(expenseForm.amount),
+      description: expenseForm.description,
+      date: expenseForm.date,
+      receiptUrl: expenseForm.receiptUrl || undefined,
+    });
+    setIsExpenseModalOpen(false);
+    setExpenseForm({
+      propertyId: '',
+      vendorId: '',
+      category: 'repairs',
+      amount: '',
+      description: '',
+      date: format(new Date(), 'yyyy-MM-dd'),
+      receiptUrl: '',
+    });
+    toast.success('Expense added');
+  };
+
+  const handleMarkupSubmit = () => {
+    const cost = Number(markupForm.costPaid);
+    const charged = Number(markupForm.chargedToClient);
+    if (!markupForm.description.trim()) {
+      toast.error('Please enter a description');
+      return;
+    }
+    if (isNaN(cost) || cost < 0) {
+      toast.error('Please enter a valid cost paid');
+      return;
+    }
+    if (isNaN(charged) || charged <= 0) {
+      toast.error('Please enter a valid amount charged to client');
+      return;
+    }
+    if (charged <= cost) {
+      toast.error('Amount charged must be greater than cost paid to create a markup');
+      return;
+    }
+    const newItem: MarkupItem = {
+      id: crypto.randomUUID(),
+      description: markupForm.description,
+      category: markupForm.category,
+      costPaid: cost,
+      chargedToClient: charged,
+      date: markupForm.date,
+    };
+    const updated = [...markupItems, newItem];
+    setMarkupItems(updated);
+    saveMarkups(updated);
+    setIsMarkupModalOpen(false);
+    setMarkupForm({
+      description: '',
+      category: 'repairs',
+      costPaid: '',
+      chargedToClient: '',
+      date: format(new Date(), 'yyyy-MM-dd'),
+    });
+    toast.success('Markup added');
+  };
+
+  const handleDeleteMarkup = (id: string) => {
+    const updated = markupItems.filter((m) => m.id !== id);
+    setMarkupItems(updated);
+    saveMarkups(updated);
+    toast.success('Markup removed');
   };
 
   return (
@@ -348,6 +525,9 @@ export function Reports() {
               className="btn-primary"
             >
               <Plus size={16} /> Add Expense
+            </button>
+            <button onClick={() => setIsMarkupModalOpen(true)} className="btn-secondary">
+              <Plus size={16} /> Add Markup
             </button>
             <button onClick={handlePrint} className="btn-outline">
               <Printer size={16} /> Print
@@ -386,6 +566,19 @@ export function Reports() {
               </select>
             </div>
           )}
+          {reportType === 'company' && (
+            <div>
+              <label className="label">Period</label>
+              <select
+                value={companyPeriod}
+                onChange={(e) => setCompanyPeriod(e.target.value as 'annual' | 'monthly')}
+                className="input-field"
+              >
+                <option value="annual">Annual</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+          )}
           <div>
             <label className="label">Year</label>
             <select
@@ -398,7 +591,7 @@ export function Reports() {
               ))}
             </select>
           </div>
-          {reportType === 'monthly' && (
+          {isMonthlyFilter && (
             <div>
               <label className="label">Month</label>
               <select
@@ -446,6 +639,16 @@ export function Reports() {
               <span className="text-sm text-gray-700">Rent Collected</span>
               <span className="text-sm font-semibold text-green-700">{formatCurrency(report.rentCollected)}</span>
             </div>
+            {report.markupRevenue > 0 && (
+              <div className="flex justify-between items-center px-5 py-3">
+                <span className="text-sm text-gray-700">Markup Revenue</span>
+                <span className="text-sm font-semibold text-green-700">{formatCurrency(report.markupRevenue)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center px-5 py-3 bg-gray-50">
+              <span className="text-sm font-semibold text-gray-700">Total Income</span>
+              <span className="text-sm font-semibold text-green-700">{formatCurrency(report.totalIncome)}</span>
+            </div>
           </div>
 
           <div className="bg-gray-50 px-5 py-3">
@@ -462,6 +665,7 @@ export function Reports() {
               ['Commissions', report.commissions],
               ['Insurance', report.insurance],
               ['Other', report.other],
+              ['Maintenance Requests', report.maintenanceCosts],
             ].map(([label, amount]) => (
               <div key={label as string} className="flex justify-between items-center px-5 py-3">
                 <span className="text-sm text-gray-600">{label as string}</span>
@@ -481,6 +685,59 @@ export function Reports() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Markup Revenue Panel */}
+      <div className="page-card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-semibold text-gray-800">Markup Revenue</h2>
+            <p className="text-sm text-gray-500">Extra income from marked-up services (repairs, cleaning, LLC renewals, etc.)</p>
+          </div>
+          <button onClick={() => setIsMarkupModalOpen(true)} className="btn-primary btn-sm">
+            <Plus size={14} /> Add Markup
+          </button>
+        </div>
+        {report.markupItems.length === 0 ? (
+          <p className="text-sm text-gray-400">No markup items for the selected period.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="table-th">Date</th>
+                  <th className="table-th">Category</th>
+                  <th className="table-th">Description</th>
+                  <th className="table-th">Cost Paid</th>
+                  <th className="table-th">Charged to Client</th>
+                  <th className="table-th">Markup (Revenue)</th>
+                  <th className="table-th"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.markupItems.map((m) => (
+                  <tr key={m.id} className="hover:bg-gray-50">
+                    <td className="table-td">{format(new Date(m.date), 'MMM d, yyyy')}</td>
+                    <td className="table-td capitalize">{m.category}</td>
+                    <td className="table-td">{m.description}</td>
+                    <td className="table-td text-gray-600">{formatCurrency(m.costPaid)}</td>
+                    <td className="table-td text-gray-600">{formatCurrency(m.chargedToClient)}</td>
+                    <td className="table-td font-semibold text-green-700">{formatCurrency(m.chargedToClient - m.costPaid)}</td>
+                    <td className="table-td">
+                      <button
+                        onClick={() => handleDeleteMarkup(m.id)}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
+                        title="Remove markup"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="page-card">
@@ -667,6 +924,87 @@ export function Reports() {
               placeholder="https://..."
             />
           </div>
+        </div>
+      </Modal>
+
+      {/* Add Markup Modal */}
+      <Modal
+        isOpen={isMarkupModalOpen}
+        onClose={() => setIsMarkupModalOpen(false)}
+        title="Add Markup"
+        size="md"
+        footer={
+          <>
+            <button onClick={() => setIsMarkupModalOpen(false)} className="btn-outline">Cancel</button>
+            <button onClick={handleMarkupSubmit} className="btn-primary">Save Markup</button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-500 mb-4">
+          Record a service you paid for at one price and charged the client a higher amount. The difference is markup revenue for Manzione Properties.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Category</label>
+            <select
+              value={markupForm.category}
+              onChange={(e) => setMarkupForm((current) => ({ ...current, category: e.target.value }))}
+              className="input-field"
+            >
+              {markupCategories.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Date</label>
+            <input
+              value={markupForm.date}
+              onChange={(e) => setMarkupForm((current) => ({ ...current, date: e.target.value }))}
+              type="date"
+              className="input-field"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="label">Description</label>
+            <input
+              value={markupForm.description}
+              onChange={(e) => setMarkupForm((current) => ({ ...current, description: e.target.value }))}
+              className="input-field"
+              placeholder="e.g. Cleaning service, LLC renewal fee, Repair job..."
+            />
+          </div>
+          <div>
+            <label className="label">Cost Paid ($)</label>
+            <input
+              value={markupForm.costPaid}
+              onChange={(e) => setMarkupForm((current) => ({ ...current, costPaid: e.target.value }))}
+              type="number"
+              min={0}
+              step="0.01"
+              className="input-field"
+              placeholder="100.00"
+            />
+          </div>
+          <div>
+            <label className="label">Charged to Client ($)</label>
+            <input
+              value={markupForm.chargedToClient}
+              onChange={(e) => setMarkupForm((current) => ({ ...current, chargedToClient: e.target.value }))}
+              type="number"
+              min={0}
+              step="0.01"
+              className="input-field"
+              placeholder="120.00"
+            />
+          </div>
+          {markupForm.costPaid && markupForm.chargedToClient && Number(markupForm.chargedToClient) > Number(markupForm.costPaid) && (
+            <div className="col-span-2 bg-green-50 rounded-lg px-4 py-3">
+              <p className="text-sm font-semibold text-green-800">
+                Markup Revenue: {formatCurrency(Number(markupForm.chargedToClient) - Number(markupForm.costPaid))}
+              </p>
+            </div>
+          )}
         </div>
       </Modal>
     </div>
