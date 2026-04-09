@@ -24,12 +24,7 @@ alter table public.technicians enable row level security;
 
 create policy "admin_all_technicians" on public.technicians
   for all
-  using (
-    exists (
-      select 1 from public.users
-      where users.id = auth.uid() and users.role = 'admin'
-    )
-  );
+  using (public.is_admin());
 
 -- Add technician_id to maintenance_requests
 alter table public.maintenance_requests
