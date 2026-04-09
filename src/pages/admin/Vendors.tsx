@@ -88,12 +88,26 @@ export function Vendors() {
   };
 
   const onSubmit = async (data: VendorForm) => {
+    const payload: Omit<Vendor, 'id' | 'createdAt'> = {
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      category: data.category,
+      address: data.address || undefined,
+      city: data.city || undefined,
+      state: data.state || undefined,
+      zip: data.zip || undefined,
+      ein: data.ein || undefined,
+      licenseNumber: data.licenseNumber || undefined,
+      status: data.status,
+      notes: data.notes || undefined,
+    };
     try {
       if (editTarget) {
-        await updateVendor(editTarget.id, data);
+        await updateVendor(editTarget.id, payload);
         toast.success('Vendor updated');
       } else {
-        await addVendor({ ...data, properties: undefined as unknown as never } as Omit<Vendor, 'id' | 'createdAt'>);
+        await addVendor(payload);
         toast.success('Vendor added');
       }
       setIsModalOpen(false);
