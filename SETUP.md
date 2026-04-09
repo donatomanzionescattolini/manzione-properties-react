@@ -29,6 +29,12 @@ This application is now a fully live property management system powered by:
 2. Paste the contents of `supabase/schema.sql` and click **Run**
 3. This creates all tables, Row Level Security policies, and the storage bucket
 
+> **Already have an existing database?** If you set up the database before the `appliances` and `technicians` tables were added, run the following migration files in order in the SQL Editor:
+> - `supabase/migrations/20260403_appliances.sql`
+> - `supabase/migrations/20260408_technicians.sql`
+> - `supabase/migrations/20260409_fix_appliances_rls.sql`
+> - `supabase/migrations/20260409_fix_technicians_rls.sql`
+
 ### 1.3 Seed Initial Data (optional)
 1. In the SQL Editor, paste the contents of `supabase/seed.sql` and click **Run**
 2. This adds sample properties, tenants, vendors, and transactions
