@@ -77,7 +77,7 @@ async function syncCurrentUserFromSession(
 function ensureAuthStateSubscription(set: (partial: Partial<AuthState>) => void) {
   if (authStateSubscription) return;
 
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+  const authChange = supabase.auth.onAuthStateChange((event, session) => {
     void (async () => {
       if (event === 'SIGNED_OUT' || !session) {
         useDataStore.getState().resetData();
@@ -100,7 +100,7 @@ function ensureAuthStateSubscription(set: (partial: Partial<AuthState>) => void)
     })();
   });
 
-  authStateSubscription = subscription;
+  authStateSubscription = authChange.data.subscription;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({

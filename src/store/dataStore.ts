@@ -67,8 +67,7 @@ function isMissingOptionalTableError(error: SupabaseErrorLike | null) {
   return error.code === 'PGRST205'
     || error.message?.includes('Could not find the table')
     || error.message?.includes('does not exist')
-    || error.details?.includes('does not exist')
-    || false;
+    || error.details?.includes('does not exist');
 }
 
 function markOptionalTableMissing(table: OptionalTableName) {
