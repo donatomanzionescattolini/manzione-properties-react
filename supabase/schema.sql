@@ -31,12 +31,8 @@ as $$
     select 1 from public.profiles
     where id = auth.uid() and role = 'admin'
   );
-            (
-              (storage.foldername(name))[1] = 'maintenance'
-              and (storage.foldername(name))[2] = t.id::text
-            )
-            or (storage.foldername(name))[1] = coalesce(t.property_id::text, '')
-            or (storage.foldername(name))[2] = t.id::text
+$$;
+
 create policy "Admins can view all profiles" on public.profiles
   for select using (public.is_admin());
 

@@ -29,11 +29,10 @@ This application is now a fully live property management system powered by:
 2. Paste the contents of `supabase/schema.sql` and click **Run**
 3. This creates all tables, Row Level Security policies, and the storage bucket
 
-> **Already have an existing database?** If you set up the database before the `appliances` and `technicians` tables were added, run the following migration files in order in the SQL Editor:
-> - `supabase/migrations/20260403_appliances.sql`
-> - `supabase/migrations/20260408_technicians.sql`
-> - `supabase/migrations/20260409_fix_appliances_rls.sql`
-> - `supabase/migrations/20260409_fix_technicians_rls.sql`
+> **Already have an existing database?** If the Appliances or Technicians pages show errors (404 from Supabase), the tables need to be created. Run the single combined migration in the SQL Editor:
+> - `supabase/migrations/20260409_add_appliances_and_technicians.sql`
+>
+> After running it, clear the `missing-supabase-tables` key from your browser's **localStorage** (DevTools → Application → Local Storage) to force the app to retry immediately without waiting for the 5-minute cache to expire.
 
 ### 1.3 Seed Initial Data (optional)
 1. In the SQL Editor, paste the contents of `supabase/seed.sql` and click **Run**
