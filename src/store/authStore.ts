@@ -78,7 +78,7 @@ function ensureAuthStateSubscription(set: (partial: Partial<AuthState>) => void)
   if (authStateSubscription) return;
 
   const authChange = supabase.auth.onAuthStateChange((event, session) => {
-    void (async () => {
+    const syncPromise = (async () => {
       if (event === 'SIGNED_OUT' || !session) {
         useDataStore.getState().resetData();
         set({ currentUser: null });
@@ -94,10 +94,14 @@ function ensureAuthStateSubscription(set: (partial: Partial<AuthState>) => void)
             return;
           }
 
-          console.error('Auth state sync error:', err);
+          throw err;
         }
       }
     })();
+
+    syncPromise.catch((err) => {
+      console.error('Auth state sync error:', err);
+    });
   });
 
   authStateSubscription = authChange.data.subscription;

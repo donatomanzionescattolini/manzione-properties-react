@@ -22,11 +22,16 @@ type SupabaseErrorLike = {
   message?: string;
   details?: string | null;
 };
+type MissingOptionalTablesCache = {
+  tables: OptionalTableName[];
+  expiresAt: number;
+};
 
 const OPTIONAL_TABLE_STORAGE_KEY = 'missing-supabase-tables';
 const OPTIONAL_TABLES: OptionalTableName[] = ['appliances', 'technicians'];
+const OPTIONAL_TABLE_CACHE_TTL_MS = 5 * 60 * 1000;
 
-function loadMissingOptionalTables() {
+function loadMissingOptionalTables(): Set<OptionalTableName> {
   if (typeof window === 'undefined') return new Set<OptionalTableName>();
 
   try {
@@ -34,10 +39,21 @@ function loadMissingOptionalTables() {
     if (!raw) return new Set<OptionalTableName>();
 
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set<OptionalTableName>();
+    if (Array.isArray(parsed)) {
+      return new Set(
+        parsed.filter((value): value is OptionalTableName =>
+          OPTIONAL_TABLES.includes(value as OptionalTableName)
+        )
+      );
+    }
+
+    if (!parsed || typeof parsed !== 'object' || parsed.expiresAt <= Date.now() || !Array.isArray(parsed.tables)) {
+      window.localStorage.removeItem(OPTIONAL_TABLE_STORAGE_KEY);
+      return new Set<OptionalTableName>();
+    }
 
     return new Set(
-      parsed.filter((value): value is OptionalTableName =>
+      parsed.tables.filter((value: unknown): value is OptionalTableName =>
         OPTIONAL_TABLES.includes(value as OptionalTableName)
       )
     );
@@ -46,15 +62,20 @@ function loadMissingOptionalTables() {
   }
 }
 
-const missingOptionalTables = loadMissingOptionalTables();
+const missingOptionalTables: Set<OptionalTableName> = loadMissingOptionalTables();
 
 function persistMissingOptionalTables() {
   if (typeof window === 'undefined') return;
 
   try {
+    const cache: MissingOptionalTablesCache = {
+      tables: Array.from(missingOptionalTables),
+      expiresAt: Date.now() + OPTIONAL_TABLE_CACHE_TTL_MS,
+    };
+
     window.localStorage.setItem(
       OPTIONAL_TABLE_STORAGE_KEY,
-      JSON.stringify(Array.from(missingOptionalTables))
+      JSON.stringify(cache)
     );
   } catch {
     // Ignore storage errors and continue falling back to in-memory caching.
@@ -64,10 +85,14 @@ function persistMissingOptionalTables() {
 function isMissingOptionalTableError(error: SupabaseErrorLike | null) {
   if (!error) return false;
 
+  const details = `${error.message ?? ''} ${error.details ?? ''}`.toLowerCase();
+
   return error.code === 'PGRST205'
-    || error.message?.includes('Could not find the table')
-    || error.message?.includes('does not exist')
-    || error.details?.includes('does not exist');
+    || details.includes('could not find the table')
+    || (
+      details.includes('does not exist')
+      && (details.includes('relation') || details.includes('table'))
+    );
 }
 
 function markOptionalTableMissing(table: OptionalTableName) {
@@ -75,7 +100,7 @@ function markOptionalTableMissing(table: OptionalTableName) {
 
   missingOptionalTables.add(table);
   persistMissingOptionalTables();
-  console.warn(`Supabase table "${table}" is unavailable; skipping related data loads until it exists.`);
+  console.warn(`Supabase table "${table}" is unavailable; skipping related data loads for 5 minutes before retrying.`);
 }
 
 async function loadOptionalTableRows(table: OptionalTableName, orderBy: string, ascending = true) {
