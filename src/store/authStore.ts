@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { useDataStore } from './dataStore';
 import type { User } from '../types';
-import type { Session } from '@supabase/supabase-js';
+import type { Session, Subscription } from '@supabase/supabase-js';
 
 interface AuthState {
   currentUser: User | null;
@@ -12,6 +12,10 @@ interface AuthState {
   resetPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   initialize: () => Promise<void>;
 }
+
+let authInitializationPromise: Promise<void> | null = null;
+let hasInitializedAuth = false;
+let authStateSubscription: Subscription | null = null;
 
 async function loadCurrentUserFromSession(session: Session | null) {
   if (!session?.user) return null;
@@ -56,27 +60,25 @@ async function clearInvalidSession(set: (partial: Partial<AuthState>) => void) {
   }
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  currentUser: null,
-  isLoading: true,
+async function syncCurrentUserFromSession(
+  set: (partial: Partial<AuthState>) => void,
+  session: Session | null
+) {
+  if (!session) {
+    useDataStore.getState().resetData();
+    set({ currentUser: null });
+    return;
+  }
 
-  initialize: async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const currentUser = await loadCurrentUserFromSession(session);
-      set({ currentUser });
-    } catch (err) {
-      if (isInvalidSessionError(err)) {
-        await clearInvalidSession(set);
-        return;
-      }
+  const currentUser = await loadCurrentUserFromSession(session);
+  set({ currentUser });
+}
 
-      console.error('Auth initialization error:', err);
-    } finally {
-      set({ isLoading: false });
-    }
+function ensureAuthStateSubscription(set: (partial: Partial<AuthState>) => void) {
+  if (authStateSubscription) return;
 
-    supabase.auth.onAuthStateChange(async (event, session) => {
+  const authChangeListener = supabase.auth.onAuthStateChange((event, session) => {
+    const syncPromise = (async () => {
       if (event === 'SIGNED_OUT' || !session) {
         useDataStore.getState().resetData();
         set({ currentUser: null });
@@ -85,18 +87,65 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (['SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED', 'INITIAL_SESSION'].includes(event)) {
         try {
-          const currentUser = await loadCurrentUserFromSession(session);
-          set({ currentUser });
+          await syncCurrentUserFromSession(set, session);
         } catch (err) {
           if (isInvalidSessionError(err)) {
             await clearInvalidSession(set);
             return;
           }
 
-          console.error('Auth state sync error:', err);
+          throw err;
         }
       }
+    })();
+
+    syncPromise.catch((err) => {
+      console.error('Auth state sync error:', err);
     });
+  });
+
+  authStateSubscription = authChangeListener.data.subscription;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  currentUser: null,
+  isLoading: true,
+
+  initialize: async () => {
+    if (hasInitializedAuth) {
+      set({ isLoading: false });
+      return;
+    }
+
+    if (authInitializationPromise) {
+      await authInitializationPromise;
+      return;
+    }
+
+    authInitializationPromise = (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await syncCurrentUserFromSession(set, session);
+      } catch (err) {
+        if (isInvalidSessionError(err)) {
+          await clearInvalidSession(set);
+          return;
+        }
+
+        console.error('Auth initialization error:', err);
+      } finally {
+        hasInitializedAuth = true;
+        set({ isLoading: false });
+      }
+
+      ensureAuthStateSubscription(set);
+    })();
+
+    try {
+      await authInitializationPromise;
+    } finally {
+      authInitializationPromise = null;
+    }
   },
 
   login: async (email, password) => {
