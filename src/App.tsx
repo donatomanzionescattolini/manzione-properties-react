@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './router';
 import { ToastContainer } from './components/ui/Toast';
@@ -28,17 +28,27 @@ function SupabaseConfigError() {
 export default function App() {
   const { initialize, currentUser, isLoading: authLoading } = useAuthStore();
   const { loadData } = useDataStore();
+  const lastLoadedUserKeyRef = useRef<string | null>(null);
 
   // Initialize Supabase auth session on app start
   useEffect(() => {
-    initialize();
+    void initialize();
   }, [initialize]);
 
   // Load data whenever the authenticated user changes
   useEffect(() => {
-    if (currentUser && !authLoading) {
-      loadData(currentUser.role, currentUser.tenantId);
+    if (authLoading) return;
+
+    if (!currentUser) {
+      lastLoadedUserKeyRef.current = null;
+      return;
     }
+
+    const userKey = `${currentUser.id}:${currentUser.role}:${currentUser.tenantId ?? ''}`;
+    if (lastLoadedUserKeyRef.current === userKey) return;
+
+    lastLoadedUserKeyRef.current = userKey;
+    void loadData(currentUser.role, currentUser.tenantId);
   }, [currentUser, authLoading, loadData]);
 
   if (!isSupabaseConfigured) {

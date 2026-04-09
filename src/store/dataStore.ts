@@ -16,6 +16,83 @@ import type {
   Appliance,
 } from '../types';
 
+type OptionalTableName = 'appliances' | 'technicians';
+type SupabaseErrorLike = {
+  code?: string | null;
+  message?: string;
+  details?: string | null;
+};
+
+const OPTIONAL_TABLE_STORAGE_KEY = 'missing-supabase-tables';
+const OPTIONAL_TABLES: OptionalTableName[] = ['appliances', 'technicians'];
+
+function loadMissingOptionalTables() {
+  if (typeof window === 'undefined') return new Set<OptionalTableName>();
+
+  try {
+    const raw = window.localStorage.getItem(OPTIONAL_TABLE_STORAGE_KEY);
+    if (!raw) return new Set<OptionalTableName>();
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set<OptionalTableName>();
+
+    return new Set(
+      parsed.filter((value): value is OptionalTableName =>
+        OPTIONAL_TABLES.includes(value as OptionalTableName)
+      )
+    );
+  } catch {
+    return new Set<OptionalTableName>();
+  }
+}
+
+const missingOptionalTables = loadMissingOptionalTables();
+
+function persistMissingOptionalTables() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(
+      OPTIONAL_TABLE_STORAGE_KEY,
+      JSON.stringify(Array.from(missingOptionalTables))
+    );
+  } catch {
+    // Ignore storage errors and continue falling back to in-memory caching.
+  }
+}
+
+function isMissingOptionalTableError(error: SupabaseErrorLike | null) {
+  if (!error) return false;
+
+  return error.code === 'PGRST205'
+    || error.message?.includes('Could not find the table')
+    || error.message?.includes('does not exist')
+    || error.details?.includes('does not exist')
+    || false;
+}
+
+function markOptionalTableMissing(table: OptionalTableName) {
+  if (missingOptionalTables.has(table)) return;
+
+  missingOptionalTables.add(table);
+  persistMissingOptionalTables();
+  console.warn(`Supabase table "${table}" is unavailable; skipping related data loads until it exists.`);
+}
+
+async function loadOptionalTableRows(table: OptionalTableName, orderBy: string, ascending = true) {
+  if (missingOptionalTables.has(table)) return [];
+
+  const { data, error } = await supabase.from(table).select('*').order(orderBy, { ascending });
+
+  if (isMissingOptionalTableError(error)) {
+    markOptionalTableMissing(table);
+    return [];
+  }
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 // ─── DB Row → App Type Mappers ─────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -364,12 +441,12 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           lateFeesRes,
           maintenanceRes,
           vendorsRes,
-          techniciansRes,
+          techniciansRows,
           ownersRes,
           expensesRes,
           escrowRes,
           documentsRes,
-          appliancesRes,
+          appliancesRows,
         ] = await Promise.all([
           supabase.from('properties').select('*').order('created_at'),
           supabase.from('tenants').select('*').order('created_at'),
@@ -377,12 +454,12 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           supabase.from('late_fees').select('*').order('created_at', { ascending: false }),
           supabase.from('maintenance_requests').select('*, maintenance_notes(*)').order('created_at', { ascending: false }),
           supabase.from('vendors').select('*').order('name'),
-          supabase.from('technicians').select('*').order('last_name'),
+          loadOptionalTableRows('technicians', 'last_name'),
           supabase.from('owners').select('*').order('name'),
           supabase.from('expenses').select('*').order('date', { ascending: false }),
           supabase.from('escrow_transactions').select('*').order('created_at', { ascending: false }),
           supabase.from('documents').select('*').order('created_at', { ascending: false }),
-          supabase.from('appliances').select('*').order('created_at', { ascending: false }),
+          loadOptionalTableRows('appliances', 'created_at', false),
         ]);
 
         set({
@@ -392,12 +469,12 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
           lateFees: (lateFeesRes.data ?? []).map(toLateFee),
           maintenanceRequests: (maintenanceRes.data ?? []).map(toMaintenanceRequest),
           vendors: (vendorsRes.data ?? []).map(toVendor),
-          technicians: (techniciansRes.data ?? []).map(toTechnician),
+          technicians: techniciansRows.map(toTechnician),
           owners: (ownersRes.data ?? []).map(toOwner),
           expenses: (expensesRes.data ?? []).map(toExpense),
           escrowTransactions: (escrowRes.data ?? []).map(toEscrow),
           documents: (documentsRes.data ?? []).map(toDocument),
-          appliances: (appliancesRes.data ?? []).map(toAppliance),
+          appliances: appliancesRows.map(toAppliance),
           isLoading: false,
         });
       } else {
